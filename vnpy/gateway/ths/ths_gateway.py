@@ -659,7 +659,7 @@ class TdxMdApi(object):
                 sleep(self.req_interval)
                 dt = datetime.now()
                 if last_dt.minute != dt.minute:
-                    self.gateway.write_log('tdx[{}] check point. {}, process symbols:{}'.format(i, dt, symbols))
+                    self.gateway.write_log('tdx[{}] cp{}, symbols:{},last_dt:{}'.format(i, dt, symbols, self.last_tick_dt))
                     last_dt = dt
         except Exception as ex:
             self.gateway.write_error(u'tdx[{}] pool.run exception:{},{}'.format(i, str(ex), traceback.format_exc()))

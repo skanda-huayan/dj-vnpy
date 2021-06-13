@@ -5,6 +5,7 @@ import logging
 from logging import Logger
 import smtplib
 import os
+import sys
 from abc import ABC
 from datetime import datetime
 from email.message import EmailMessage
@@ -134,13 +135,24 @@ class MainEngine:
         event = Event(EVENT_LOG, log)
         self.event_engine.put(event)
 
+    def write_error(self, msg: str, source: str = "") -> None:
+        """
+        Put log event with specific message.
+        """
+        log = LogData(msg=msg, gateway_name=source)
+        event = Event(EVENT_LOG, log)
+        self.event_engine.put(event)
+
+        print(msg, file=sys.stderr)
+
+
     def get_gateway(self, gateway_name: str) -> BaseGateway:
         """
         Return gateway object by name.
         """
         gateway = self.gateways.get(gateway_name, None)
         if not gateway:
-            self.write_log(f"找不到底层接口：{gateway_name}")
+            self.write_error(f"找不到底层接口：{gateway_name}")
         return gateway
 
     def get_engine(self, engine_name: str) -> "BaseEngine":
@@ -149,7 +161,7 @@ class MainEngine:
         """
         engine = self.engines.get(engine_name, None)
         if not engine:
-            self.write_log(f"找不到引擎：{engine_name}")
+            self.write_error(f"找不到引擎：{engine_name}")
         return engine
 
     def get_default_setting(self, gateway_name: str) -> Optional[Dict[str, Any]]:
@@ -192,7 +204,11 @@ class MainEngine:
         """
         gateway = self.get_gateway(gateway_name)
         if gateway:
-            gateway.connect(setting)
+            try:
+                gateway.connect(setting)
+            except Exception as ex:
+                msg = f'gateway:{gateway_name}启动连接失败:{str(ex)}'
+                self.write_log(msg=msg)
 
     def subscribe(self, req: SubscribeRequest, gateway_name: str) -> None:
         """
@@ -264,7 +280,7 @@ class MainEngine:
         if gateway:
             return gateway.query_history(req)
         else:
-            self.write_log(f'网关为空，请检查合约得网关是否与连接得网关一致')
+            self.write_error(f'网关为空，请检查合约得网关是否与连接得网关一致')
             return None
 
     def close(self) -> None:
