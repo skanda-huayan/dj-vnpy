@@ -15,6 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
 from datetime import datetime, timedelta
+from time import sleep
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
@@ -1072,6 +1073,10 @@ class CtaEngine(BaseEngine):
                 self.write_log(f'{strategy_name} => 启动交易')
                 self.start_strategy(strategy_name)
 
+                # 等待3秒，避免快速重新请求rest数据
+                self.write_log(f'等待3秒')
+                sleep(3)
+
         except Exception as ex:
             msg = f'{strategy_name} => 执行on_init异常:{str(ex)}'
             self.write_error(msg)
@@ -1822,6 +1827,7 @@ class CtaEngine(BaseEngine):
         self.strategy_setting = load_json(self.setting_filename)
 
         for strategy_name, strategy_config in self.strategy_setting.items():
+            self.write_log(f'开始加载{strategy_name}')
             self.add_strategy(
                 class_name=strategy_config["class_name"],
                 strategy_name=strategy_name,
@@ -1830,6 +1836,7 @@ class CtaEngine(BaseEngine):
                 auto_init=strategy_config.get('auto_init', False),
                 auto_start=strategy_config.get('auto_start', False)
             )
+
 
     def update_strategy_setting(self, strategy_name: str, setting: dict, auto_init: bool = False,
                                 auto_start: bool = False):

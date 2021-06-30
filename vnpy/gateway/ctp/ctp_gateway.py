@@ -564,37 +564,37 @@ class CtpGateway(BaseGateway):
     def close(self):
         """"""
         if self.md_api:
-            self.write_log('断开行情API')
+            self.write_log('断开行情API',on_log=True)
             tmp1 = self.md_api
             self.md_api = None
             tmp1.close()
 
         if self.l2_md_api:
-            self.write_log('断开五档行情API')
+            self.write_log('断开五档行情API',on_log=True)
             tmp1 = self.l2_md_api
             self.l2_md_api = None
             tmp1.close()
 
         if self.td_api:
-            self.write_log('断开交易API')
+            self.write_log('断开交易API',on_log=True)
             tmp2 = self.td_api
             self.td_api = None
             tmp2.close()
 
         if self.tdx_api:
-            self.write_log(u'断开tdx指数行情API')
+            self.write_log(u'断开tdx指数行情API',on_log=True)
             tmp3 = self.tdx_api
             self.tdx_api = None
             tmp3.close()
 
         if self.rabbit_api:
-            self.write_log(u'断开rabbit MQ tdx指数行情API')
+            self.write_log(u'断开rabbit MQ tdx指数行情API',on_log=True)
             tmp4 = self.rabbit_api
             self.rabbit_api = None
             tmp4.close()
 
         if self.tq_api:
-            self.write_log(u'天勤行情API')
+            self.write_log(u'断开天勤行情API',on_log=True)
             tmp5 = self.tq_api
             self.tq_api = None
             tmp5.close()
@@ -659,7 +659,7 @@ class CtpMdApi(MdApi):
         """
         Callback when front server is connected.
         """
-        self.gateway.write_log(f"{self.name}行情服务器连接成功")
+        self.gateway.write_log(f"{self.name}行情服务器连接成功",on_log=True)
         self.connect_status = True
         self.login()
         self.gateway.status.update(
@@ -671,7 +671,7 @@ class CtpMdApi(MdApi):
         """
         self.login_status = False
         self.connect_status = False
-        self.gateway.write_log(f"{self.name}行情服务器连接断开，原因{reason}")
+        self.gateway.write_log(f"{self.name}行情服务器连接断开，原因{reason}",on_log=True)
         self.gateway.status.update(
             {f'{self.name}md_con': False, f'{self.name}md_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
@@ -681,7 +681,7 @@ class CtpMdApi(MdApi):
         """
         if not error["ErrorID"]:
             self.login_status = True
-            self.gateway.write_log(f"{self.name}行情服务器登录成功")
+            self.gateway.write_log(f"{self.name}行情服务器登录成功",on_log=True)
 
             for symbol in self.subscribed:
                 self.subscribeMarketData(symbol)
@@ -877,7 +877,7 @@ class CtpTdApi(TdApi):
 
     def onFrontConnected(self):
         """"""
-        self.gateway.write_log("交易服务器连接成功")
+        self.gateway.write_log("交易服务器连接成功",on_log=True)
         self.connect_status = True
         if self.auth_code:
             self.gateway.write_log("向交易服务器提交授权码验证")
@@ -889,7 +889,7 @@ class CtpTdApi(TdApi):
     def onFrontDisconnected(self, reason: int):
         """"""
         self.login_status = False
-        self.gateway.write_log(f"交易服务器连接断开，原因{reason}")
+        self.gateway.write_log(f"交易服务器连接断开，原因{reason}",on_log=True)
         self.gateway.status.update({'td_con': False, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspAuthenticate(self, data: dict, error: dict, reqid: int, last: bool):
@@ -910,7 +910,7 @@ class CtpTdApi(TdApi):
             self.sessionid = data["SessionID"]
             self.login_status = True
             self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-            self.gateway.write_log("交易帐号登录完成")
+            self.gateway.write_log("交易帐号登录完成",on_log=True)
 
             # Confirm settlement
             req = {
@@ -971,7 +971,7 @@ class CtpTdApi(TdApi):
         """
         Callback of settlment info confimation.
         """
-        self.gateway.write_log("结算信息确认成功")
+        self.gateway.write_log("结算信息确认成功",on_log=True)
 
         while True:
             self.reqid += 1
@@ -1594,7 +1594,7 @@ class TdxMdApi():
         # 创建api连接对象实例
         try:
             if self.api is None or not self.connection_status:
-                self.gateway.write_log(u'开始连接通达信行情服务器')
+                self.gateway.write_log(u'开始连接通达信行情服务器',on_log=True)
                 self.api = TdxExHq_API(heartbeat=True, auto_retry=True, raise_exception=True)
 
                 # 选取最佳服务器
@@ -1619,12 +1619,12 @@ class TdxMdApi():
                     self.thread.start()
 
         except Exception as ex:
-            self.gateway.write_log(u'连接服务器tdx异常:{},{}'.format(str(ex), traceback.format_exc()))
+            self.gateway.write_log(u'连接服务器tdx异常:{},{}'.format(str(ex), traceback.format_exc()),on_log=True)
             return
 
     def close(self):
         """退出API"""
-        self.gateway.write_log(u'退出tdx API')
+        self.gateway.write_log(u'退出tdx API',on_log=True)
         self.connection_status = False
 
         if self.thread:
@@ -2110,7 +2110,7 @@ class TqMdApi():
             from tqsdk import TqApi
             self.api = TqApi(url="wss://u.shinnytech.com/t/md/front/mobile")
         except Exception as e:
-            self.gateway.write_log(f'天勤行情API接入异常'.format(str(e)))
+            self.gateway.write_log(f'天勤行情API接入异常'.format(str(e)),on_log=True)
         if self.api:
             self.is_connected = True
             self.gateway.write_log(f'天勤行情API已连接')
@@ -2216,7 +2216,7 @@ class TqMdApi():
                 self.quote_objs.append((req.vt_symbol, quote))
                 self.subscribe_array.append(req.vt_symbol)
             except Exception as ex:
-                self.gateway.write_log('订阅天勤行情异常:{}'.format(str(ex)))
+                self.gateway.write_log('订阅天勤行情异常:{}'.format(str(ex)),on_log=True)
 
     def query_contracts(self) -> None:
         """"""
@@ -2317,4 +2317,4 @@ class TqMdApi():
                 if self.update_thread:
                     self.update_thread.join()
         except Exception as e:
-            self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)))
+            self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)),on_log=True)

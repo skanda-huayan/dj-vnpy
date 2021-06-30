@@ -1386,6 +1386,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                 if active_order['offset'] != Offset.OPEN:
                     grid.open_status = False
                     grid.close_status = True
+                    grid.open_time = None
 
                     self.write_log(f'{grid.direction.value}单已平仓完毕,order_price:{order.price}'
                                    + f',volume:{order.volume}')
@@ -1396,6 +1397,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                 # 开仓完毕( buy, short)
                 else:
                     grid.open_status = True
+                    grid.open_time = self.cur_datetime
                     self.write_log(f'{grid.direction.value}单已开仓完毕,order_price:{order.price}'
                                    + f',volume:{order.volume}')
 

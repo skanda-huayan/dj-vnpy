@@ -335,7 +335,8 @@ class PortfolioTestingEngine(BackTestingEngine):
                         last_trading_day = bar.trading_day
 
                         # 第二个交易日,撤单
-                        self.cancel_orders()
+                        if not symbol.startswith('future_renko'):
+                            self.cancel_orders()
                         # 更新持仓缓存
                         self.update_pos_buffer()
 

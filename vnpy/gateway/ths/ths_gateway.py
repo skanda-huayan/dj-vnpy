@@ -173,23 +173,28 @@ class ThsGateway(BaseGateway):
 
     def connect(self, setting: dict) -> None:
         """连接"""
-        userid = setting["资金账号"]
-        password = setting["登录密码"]
+        try:
+            userid = setting["资金账号"]
+            password = setting["登录密码"]
 
-        # 运行easytrader restful 服务端的IP地址、端口
-        host = setting["RPC IP"]
-        port = setting["RPC Port"]
-        force_restart = setting.get('强制重启',False)
+            # 运行easytrader restful 服务端的IP地址、端口
+            host = setting["RPC IP"]
+            port = setting["RPC Port"]
+            force_restart = setting.get('强制重启',False)
 
-        self.md_api.connect()
-        self.td_api.connect(user_id=userid,
-                            user_pwd=password,
-                            host=host,
-                            port=port,
-                            force_restart=force_restart)
-        # self.tq_api = TqMdApi(self)
-        # self.tq_api.connect()
-        self.init_query()
+            self.md_api.connect()
+            self.td_api.connect(user_id=userid,
+                                user_pwd=password,
+                                host=host,
+                                port=port,
+                                force_restart=force_restart)
+            # self.tq_api = TqMdApi(self)
+            # self.tq_api.connect()
+            self.init_query()
+
+        except Exception as ex:
+            msg = f'{self.gateway_name}连接行情和交易接口异常:{str(ex)}'
+            self.write_error(msg)
 
     def close(self) -> None:
         """"""
@@ -248,6 +253,8 @@ class ThsGateway(BaseGateway):
         self.count = 0
         self.query_functions = [self.query_orders, self.query_trades, self.query_account, self.query_position]
 
+    def check_status(self):
+        self.write_log(self.status)
 
 class TdxMdApi(object):
     """通达信行情和基础数据"""
@@ -403,7 +410,7 @@ class TdxMdApi(object):
         self.pool.map_async(self.run, range(n))
 
         # 设置上层的连接状态
-        self.gateway.tdxConnected = True
+        self.gateway.tdx_connected = True
 
     def reconnect(self, i):
         """
@@ -884,14 +891,21 @@ class ThsTdApi(object):
         self.password = user_pwd
         self.rpc_host = host
         self.rpc_port = port
+        self.gateway.write_log(f'{self.gateway_name}开始连接{host}:{port}')
+        try:
+            # 创建 easy客户端
+            self.api = easytrader_use(broker='pingan_ths', host=self.rpc_host, port=self.rpc_port)
 
-        # 创建 easy客户端
-        self.api = easytrader_use(broker='pingan_ths', host=self.rpc_host, port=self.rpc_port)
+            # 输入参数(资金账号、密码）
+            self.api.prepare(exe_path='C:\\THS\\xiadan.exe', user=self.userid, password=self.password,force_restart=force_restart)
 
-        # 输入参数(资金账号、密码）
-        self.api.prepare(exe_path='C:\\THS\\xiadan.exe', user=self.userid, password=self.password,force_restart=force_restart)
+            self.login_status = True
 
-        self.login_status = True
+        except Exception as ex:
+            msg = f'{self.gateway_name}连接{host}:{port}异常:{str(ex)}'
+            self.gateway.write_error(msg)
+            from vnpy.trader.util_wechat import send_wx_msg
+            send_wx_msg(msg)
 
     def reconnect(self):
         """连接"""

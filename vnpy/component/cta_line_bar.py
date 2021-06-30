@@ -5536,6 +5536,11 @@ class CtaLineBar(object):
         self.chanlun_calculated = True
 
     @property
+    def cur_fenxing(self):
+        """当前分型"""
+        return self.fenxing_list[-1] if len(self.fenxing_list) > 0 else None
+
+    @property
     def fenxing_list(self):
         if not self.chanlun_calculated:
             self.__count_chanlun()
@@ -5583,12 +5588,6 @@ class CtaLineBar(object):
     def tre_duan(self):
         """倒数第三个线段"""
         return self.duan_list[-3] if len(self.duan_list) > 2 else None
-
-    @property
-    def duan_zs_list(self):
-        if not self.chanlun_calculated:
-            self.__count_chanlun()
-        return self._duan_zs_list
 
     @property
     def duan_zs_list(self):
@@ -6105,6 +6104,7 @@ class CtaLineBar(object):
             return True
 
         return False
+
 
     def write_log(self, content):
         """记录CTA日志"""

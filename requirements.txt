@@ -1,6 +1,6 @@
 six
 PyQt5
-pyqtgraph
+pyqtgraph==0.10.0
 dataclasses; python_version<="3.6"
 qdarkstyle
 requests

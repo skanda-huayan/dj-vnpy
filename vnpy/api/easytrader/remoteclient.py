@@ -2,12 +2,11 @@
 import requests
 
 from .utils.misc import file2dict
+from vnpy.rpc import RpcClient
 
 
-def use(broker, host, port=1430, **kwargs):
-    return RemoteClient(broker, host, port)
 
-
+TIMEOUT = 10
 class RemoteClient:
     def __init__(self, broker, host, port=1430, **kwargs):
         self._s = requests.session()
@@ -44,7 +43,8 @@ class RemoteClient:
 
         params["broker"] = self._broker
 
-        response = self._s.post(self._api + "/prepare", json=params)
+        # prepare需要启动同花顺客户端，需要的时间比较长，所以超时给长一些时间
+        response = self._s.post(self._api + "/prepare", json=params, timeout=60)
         if response.status_code >= 300:
             raise Exception(response.json()["error"])
         return response.json()
@@ -76,7 +76,7 @@ class RemoteClient:
         return self.common_get("exit")
 
     def common_get(self, endpoint):
-        response = self._s.get(self._api + "/" + endpoint)
+        response = self._s.get(self._api + "/" + endpoint, timeout=TIMEOUT)
         if response.status_code >= 300:
             print(Exception(response.json()["error"]))
         return response.json()
@@ -85,7 +85,7 @@ class RemoteClient:
         params = locals().copy()
         params.pop("self")
 
-        response = self._s.post(self._api + "/buy", json=params)
+        response = self._s.post(self._api + "/buy", json=params, timeout=TIMEOUT)
         if response.status_code >= 300:
             raise Exception(response.json()["error"])
         return response.json()
@@ -94,7 +94,7 @@ class RemoteClient:
         params = locals().copy()
         params.pop("self")
 
-        response = self._s.post(self._api + "/sell", json=params)
+        response = self._s.post(self._api + "/sell", json=params, timeout=TIMEOUT)
         if response.status_code >= 300:
             raise Exception(response.json()["error"])
         return response.json()
@@ -103,7 +103,69 @@ class RemoteClient:
         params = locals().copy()
         params.pop("self")
 
-        response = self._s.post(self._api + "/cancel_entrust", json=params)
+        response = self._s.post(self._api + "/cancel_entrust", json=params, timeout=TIMEOUT)
         if response.status_code >= 300:
             raise Exception(response.json()["error"])
         return response.json()
+
+###########
+# written by 黄健威
+# 以下是新增加的ZMQ Client
+# 整个接口对外保持和原来的一致
+# 通过对原requests接口的“鸭子类型替换”来实现透明化
+
+def use(broker, host, port=1430, use_zmq=True, **kwargs):
+    if use_zmq:
+        return ZMQRemoteClient(broker, host, port)
+    else:
+        return RemoteClient(broker, host, port)
+
+class ZMQResponse(object):
+    # 这个类是模仿requests的返回结果
+    def __init__(self, status_code, data) -> None:
+        self.data = data
+        self.status_code = status_code
+
+    def json(self):
+        return self.data
+
+class MyRpcClient(RpcClient):
+    # 这个类把vnpy原生的rpc组件中的超时输出去除
+    # 原版rpc组件中，如果上一个请求后30秒内没有新的请求，会输出一段提示
+    def on_disconnected(self):
+        pass
+
+class ZMQSession(object):
+    # 这个类是模仿requests的Session
+    def __init__(self, host, port) -> None:
+        req_addr = "tcp://{}:{}".format(host, port)
+        sub_addr = "tcp://{}:{}".format(host, port+1)
+        
+        self._rpc_client = MyRpcClient()
+        self._rpc_client.start(req_addr, sub_addr)
+
+    def post(self, url, json=None, timeout=10):
+        name = url.split("/")[-1]
+        data, status_code = self._rpc_client.call_func(name, json)
+        resp = ZMQResponse(status_code, data)
+        return resp
+
+    def get(self, url, json=None, timeout=10):
+        return self.post(url, json, timeout)
+
+    def __del__(self):
+        # 当进程开始销毁对象时，显式调用stop来杀死后台的zmq线程，避免死锁无法退出
+        self._rpc_client.stop()
+    
+class ZMQRemoteClient(RemoteClient):
+    # 对原RemoteClient的重载
+    def __init__(self, broker, host, port=1430, **kwargs):
+        self._broker = broker
+        
+        # api这个项目已经不需要了
+        self._api = ""
+        # 替换Session
+        self._s = ZMQSession(host, port)
+
+    def __del__(self):
+        del self._s
