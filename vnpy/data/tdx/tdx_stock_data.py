@@ -64,6 +64,7 @@ RQ_TDX_STOCK_MARKET_MAP = {v: k for k, v in TDX_RQ_STOCK_MARKET_MAP.items()}
 # 本地缓存文件
 
 class TdxStockData(object):
+    exclude_ips = []
 
     def __init__(self, strategy=None, proxy_ip="", proxy_port=0):
         """
@@ -93,6 +94,8 @@ class TdxStockData(object):
         self.config = get_cache_config(TDX_STOCK_CONFIG)
         self.symbol_dict = self.config.get('symbol_dict', {})
         self.cache_time = self.config.get('cache_time', datetime.now() - timedelta(days=7))
+        self.best_ip = self.config.get('best_ip',{})
+        self.exclude_ips = self.config.get('exclude_ips',[])
 
         if len(self.symbol_dict) == 0 or self.cache_time < datetime.now() - timedelta(days=1):
             self.cache_config()
@@ -111,6 +114,32 @@ class TdxStockData(object):
         else:
             print(content, file=sys.stderr)
 
+    def select_best_ip(self, ip_list, proxy_ip="", proxy_port=0, exclude_ips=[]):
+        """
+        选取最快的IP
+        :param ip_list:
+        :param proxy_ip: 代理
+        :param proxy_port: 代理端口
+        :param exclude_ips: 排除清单
+        :return:
+        """
+        from pytdx.util.best_ip import ping
+        data = [ping(ip=x['ip'], port=x['port'], type_='stock', proxy_ip=proxy_ip, proxy_port=proxy_port) for x in
+                ip_list if x['ip'] not in exclude_ips]
+        results = []
+        for i in range(len(data)):
+            # 删除ping不通的数据
+            if data[i] < timedelta(0, 9, 0):
+                results.append((data[i], ip_list[i]))
+            else:
+                if ip_list[i].get('ip') not in self.exclude_ips:
+                    self.exclude_ips.append(ip_list[i].get('ip'))
+
+        # 按照ping值从小大大排序
+        results = [x[1] for x in sorted(results, key=lambda x: x[0])]
+
+        return results[0]
+
     def connect(self, is_reconnect: bool = False):
         """
         连接API
@@ -126,11 +155,38 @@ class TdxStockData(object):
                 # 选取最佳服务器
                 if is_reconnect or self.best_ip is None:
                     self.best_ip = self.config.get('best_ip', {})
+                    if is_reconnect:
+                        selected_ip = self.best_ip.get('ip')
+                        if selected_ip not in self.exclude_ips:
+                            self.exclude_ips.append(selected_ip)
+                        self.best_ip = {}
+                    else:
+                        # 超时的话，重新选择
+                        last_datetime_str = self.best_ip.get('datetime', None)
+                        if last_datetime_str:
+                            try:
+                                last_datetime = datetime.strptime(last_datetime_str, '%Y-%m-%d %H:%M:%S')
+                                ip = self.best_ip.get('ip')
+                                is_bad_ip = ip and ip in self.best_ip.get('exclude_ips', [])
+                                if (datetime.now() - last_datetime).total_seconds() > 60 * 60 * 2 or is_bad_ip:
+                                    self.best_ip = {}
+                                    if not is_bad_ip:
+                                        self.exclude_ips = []
+                            except Exception as ex:  # noqa
+                                self.best_ip = {}
+                        else:
+                            self.best_ip = {}
 
                 if len(self.best_ip) == 0:
-                    from pytdx.util.best_ip import select_best_ip
-                    self.best_ip = select_best_ip(_type='socket', proxy_ip=self.proxy_ip, proxy_port=self.proxy_port)
-                    self.config.update({'best_ip': self.best_ip})
+                    from pytdx.util.best_ip import stock_ip
+                    self.best_ip = self.select_best_ip(ip_list=stock_ip,
+                                                       proxy_ip=self.proxy_ip,
+                                                       proxy_port=self.proxy_port,
+                                                       exclude_ips=self.exclude_ips)
+                    # 保存最新的选择，排除
+                    self.config.update({'best_ip': self.best_ip,
+                                        'select_dt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                        'exclude_ips': self.exclude_ips})
                     save_cache_config(self.config, TDX_STOCK_CONFIG)
 
                 # 如果配置proxy5，使用vnpy项目下的pytdx
@@ -316,10 +372,10 @@ class TdxStockData(object):
                 for index, row in data.iterrows():
                     try:
                         add_bar = BarData(
-                        gateway_name='tdx',
-                        symbol=symbol,
-                        exchange=exchange,
-                        datetime=index
+                            gateway_name='tdx',
+                            symbol=symbol,
+                            exchange=exchange,
+                            datetime=index
                         )
                         add_bar.date = row['date']
                         add_bar.time = row['time']
@@ -363,6 +419,75 @@ class TdxStockData(object):
             self.write_log(u'重置连接')
             self.api = None
             self.connect(is_reconnect=True)
+            return False, ret_bars
+
+    def get_last_bars(self, symbol: str, period: str = '1min', n: int = 2, return_bar: bool = True):
+        """
+        获取最后n根bar
+        :param symbol:
+        :param period:
+        :param n:取bar数量
+        :param return_bar:
+        :return:
+        """
+        if not self.api:
+            self.connect()
+        ret_bars = []
+        if self.api is None:
+            return False, []
+
+        # symbol => tdx_code, market_id
+        if '.' in symbol:
+            tdx_code, market_str = symbol.split('.')
+            # 1, 上交所 ， 0， 深交所
+            market_id = 1 if market_str.upper() in ['XSHG', Exchange.SSE.value] else 0
+            self.symbol_market_dict.update({tdx_code: market_id})  # tdx合约与tdx市场的字典
+        else:
+            market_id = get_tdx_market_code(symbol)
+            tdx_code = symbol
+            self.symbol_market_dict.update({symbol: market_id})  # tdx合约与tdx市场的字典
+        # period => tdx_period
+        if period not in PERIOD_MAPPING.keys():
+            self.write_error(u'{} 周期{}不在下载清单中: {}'
+                             .format(datetime.now(), period, list(PERIOD_MAPPING.keys())))
+            return False, ret_bars
+        tdx_period = PERIOD_MAPPING.get(period)
+        try:
+            datas = self.api.get_security_bars(
+                category=PERIOD_MAPPING[period],
+                market=market_id,
+                code=tdx_code,
+                start=0,
+                count=n)
+            if not datas or len(datas) == 0:
+                return False, ret_bars
+
+            if not return_bar:
+                return True, datas
+
+            exchange = TDX_VN_STOCK_MARKET_MAP.get(market_id, Exchange.LOCAL)
+            delta_minutes = NUM_MINUTE_MAPPING.get(period, 1)
+            for data in datas:
+                bar_dt = datetime.strptime(data.get('datetime'), '%Y-%m-%d %H:%M')
+                bar_dt = bar_dt - timedelta(minutes=delta_minutes)
+                add_bar = BarData(
+                    gateway_name='tdx',
+                    symbol=symbol,
+                    exchange=exchange,
+                    datetime=bar_dt
+                )
+                add_bar.date = bar_dt.strftime('%Y-%m-%d')
+                add_bar.time = bar_dt.strftime('%H:%M:%S')
+                add_bar.trading_day = add_bar.date
+                add_bar.open_price = float(data['open'])
+                add_bar.high_price = float(data['high'])
+                add_bar.low_price = float(data['low'])
+                add_bar.close_price = float(data['close'])
+                add_bar.volume = float(data['vol'])
+                ret_bars.append(add_bar)
+            return True, ret_bars
+        except Exception as ex:
+            self.write_error(f'获取{symbol}数据失败:{str(ex)}')
             return False, ret_bars
 
     def save_cache(self,

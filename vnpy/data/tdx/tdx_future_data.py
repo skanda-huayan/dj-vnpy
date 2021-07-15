@@ -235,10 +235,9 @@ class TdxFutureData(object):
                     self.best_ip = get_cache_json(TDX_FUTURE_CONFIG)
 
                     if is_reconnect:
-                        if is_reconnect:
-                            selected_ip = self.best_ip.get('ip')
-                            if selected_ip not in self.exclude_ips:
-                                self.exclude_ips.append(selected_ip)
+                        selected_ip = self.best_ip.get('ip')
+                        if selected_ip not in self.exclude_ips:
+                            self.exclude_ips.append(selected_ip)
                         self.best_ip = {}
                     else:
                         # 超时的话，重新选择

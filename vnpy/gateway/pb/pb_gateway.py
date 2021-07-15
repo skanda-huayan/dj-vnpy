@@ -374,8 +374,8 @@ class PbGateway(BaseGateway):
                             product_id=product_id,
                             unit_id=unit_id,
                             holder_ids=holder_ids)
-        #self.tq_api = TqMdApi(self)
-        #self.tq_api.connect()
+        # self.tq_api = TqMdApi(self)
+        # self.tq_api.connect()
         self.init_query()
 
     def close(self) -> None:
@@ -1054,6 +1054,9 @@ class PbTdApi(object):
         # 未获取本地更新检查的orderid清单
         self.unchecked_orderids = []
 
+        # 警告
+        self.warning_dict = {}
+
     def close(self):
         pass
 
@@ -1110,9 +1113,9 @@ class PbTdApi(object):
         """获取资金账号信息"""
         # dbf 文件名
         account_dbf = os.path.abspath(os.path.join(self.account_folder,
-                                                        '{}{}.dbf'.format(
-                                                            PB_FILE_NAMES.get('accounts'),
-                                                            self.trading_date)))
+                                                   '{}{}.dbf'.format(
+                                                       PB_FILE_NAMES.get('accounts'),
+                                                       self.trading_date)))
         try:
             # dbf => 资金帐号信息
             self.gateway.write_log(f'扫描资金帐号信息:{account_dbf}')
@@ -1125,18 +1128,28 @@ class PbTdApi(object):
                 account = AccountData(
                     gateway_name=self.gateway_name,
                     accountid=self.userid,
-                    balance=float(data.dyjz), # ["单元净值"]
-                    frozen=float(data.dyjz) - float(data.kyye), # data["可用余额"]
+                    balance=float(data.dyjz),  # ["单元净值"]
+                    frozen=float(data.dyjz) - float(data.kyye),  # data["可用余额"]
                     currency="人民币",
                     trading_day=self.trading_day
                 )
                 self.gateway.on_account(account)
 
             table.close()
+            self.warning_dict.pop('query_account', None)
 
         except Exception as ex:
-            self.gateway.write_error(f'dbf扫描资金帐号异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+            err_msg = f'dbf扫描资金帐号异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_account', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_account': err_info})
 
     def query_account_csv(self):
         """获取资金账号信息"""
@@ -1184,9 +1197,9 @@ class PbTdApi(object):
         # , 'jysc', 'jybz', 'dryk', 'ljyk', 'fdyk', 'fyl', 'ykl', 'tzlx', 'gddm', 'mrsl', 'mcsl', 'mrje', 'mcje', 'zdf', 'bbj', 'qjcb', 'gtcb', 'gtyk', 'zgb']
         # dbf 文件名
         position_dbf = os.path.abspath(os.path.join(self.account_folder,
-                                                   '{}{}.dbf'.format(
-                                                       PB_FILE_NAMES.get('positions'),
-                                                       self.trading_date)))
+                                                    '{}{}.dbf'.format(
+                                                        PB_FILE_NAMES.get('positions'),
+                                                        self.trading_date)))
         try:
             # dbf => 股票持仓信息
             self.gateway.write_log(f'扫描股票持仓信息:{position_dbf}')
@@ -1195,7 +1208,7 @@ class PbTdApi(object):
             for data in table:
                 if str(data.zjzh).strip() != self.userid:
                     continue
-                symbol = str(data.zqdm).strip()  #["证券代码"]
+                symbol = str(data.zqdm).strip()  # ["证券代码"]
 
                 # symbol => Exchange
                 exchange = symbol_exchange_map.get(symbol, None)
@@ -1207,30 +1220,41 @@ class PbTdApi(object):
 
                 name = symbol_name_map.get(symbol, None)
                 if not name:
-                    name = data.zqmc # ["证券名称"]
+                    name = data.zqmc  # ["证券名称"]
                     symbol_name_map.update({symbol: name})
 
                 position = PositionData(
                     gateway_name=self.gateway_name,
                     accountid=self.userid,
-                    symbol=symbol,  #["证券代码"],
+                    symbol=symbol,  # ["证券代码"],
                     exchange=exchange,
                     direction=Direction.NET,
                     name=name,
-                    volume=int(data.ccsl), # ["持仓数量"]
-                    yd_volume=int(data.kysl),# ["可用数量"]
-                    price=float(data.cbjg), # ["成本价"]
-                    cur_price=float(data.zxjg), # ["最新价"]
-                    pnl=float(data.fdyk), # ["浮动盈亏"]
-                    holder_id=str(data.gddm).strip()  #["股东"]
+                    volume=int(data.ccsl),  # ["持仓数量"]
+                    yd_volume=int(data.kysl),  # ["可用数量"]
+                    price=float(data.cbjg),  # ["成本价"]
+                    cur_price=float(data.zxjg),  # ["最新价"]
+                    pnl=float(data.fdyk),  # ["浮动盈亏"]
+                    holder_id=str(data.gddm).strip()  # ["股东"]
                 )
                 self.gateway.on_position(position)
 
             table.close()
+            self.warning_dict.pop('query_position', None)
 
         except Exception as ex:
-            self.gateway.write_error(f'dbf扫描股票持仓异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf扫描股票持仓异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_position', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_position': err_info})
 
     def query_position_csv(self):
         """从csv获取持仓信息"""
@@ -1297,24 +1321,24 @@ class PbTdApi(object):
         # fields:['zqgs', 'zjzh', 'zhlx', 'cpbh', 'cpmc', 'dybh', 'dymc', 'wtph', 'wtxh', 'zqdm', 'zqmc', 'wtfx', 'jglx', 'wtjg', 'wtsl', 'wtzt', 'cjsl', 'wtje'
         # , 'cjjj', 'cdsl', 'jysc', 'fdyy', 'wtly', 'wtrq', 'wtsj', 'jybz']
         orders_dbf = os.path.abspath(os.path.join(self.account_folder,
-                                                    '{}{}.dbf'.format(
-                                                        PB_FILE_NAMES.get('orders'),
-                                                        self.trading_date)))
+                                                  '{}{}.dbf'.format(
+                                                      PB_FILE_NAMES.get('orders'),
+                                                      self.trading_date)))
         try:
             # dbf => 股票委托信息
             self.gateway.write_log(f'扫描股票委托信息:{orders_dbf}')
             table = dbf.Table(orders_dbf, codepage='cp936')
             table.open(dbf.READ_ONLY)
             for data in table:
-                if str(data.zjzh).strip() != self.userid: # ["资金账户"]
+                if str(data.zjzh).strip() != self.userid:  # ["资金账户"]
                     continue
 
                 sys_orderid = str(data.wtxh).strip()  # ["委托序号"]
 
                 # 检查是否存在本地order_manager缓存中
                 order = self.gateway.order_manager.get_order_with_sys_orderid(sys_orderid)
-                order_date = str(data.wtrq).strip() #["委托日期"]
-                order_time = str(data.wtsj).strip() #["委托时间"]
+                order_date = str(data.wtrq).strip()  # ["委托日期"]
+                order_time = str(data.wtsj).strip()  # ["委托时间"]
                 order_status = STATUS_NAME2VT.get(str(data.wtzt).strip())  # ["委托状态"]
 
                 # 检查是否存在本地orders缓存中（系统级别的委托单）
@@ -1341,7 +1365,7 @@ class PbTdApi(object):
                     sys_order = OrderData(
                         gateway_name=self.gateway_name,
                         symbol=str(data.zqdm).strip(),  # ["证券代码"]
-                        exchange=EXCHANGE_NAME2VT.get(str(data.jysc).strip()), # ["交易市场"]
+                        exchange=EXCHANGE_NAME2VT.get(str(data.jysc).strip()),  # ["交易市场"]
                         orderid=sys_orderid,
                         sys_orderid=sys_orderid,
                         accountid=self.userid,
@@ -1364,8 +1388,8 @@ class PbTdApi(object):
                 # 存在账号缓存，判断状态是否更新
                 else:
                     # 暂不处理，交给XHPT_WTCX模块处理
-                    if sys_order.status != order_status or sys_order.traded != float(data.cjsl): # ["成交数量"]
-                        sys_order.traded = float(data.cjsl) # ["成交数量"]
+                    if sys_order.status != order_status or sys_order.traded != float(data.cjsl):  # ["成交数量"]
+                        sys_order.traded = float(data.cjsl)  # ["成交数量"]
                         sys_order.status = order_status
                         self.orders.update({sys_order.sys_orderid: sys_order})
                         self.gateway.write_log(f'账号订单查询，更新:{sys_order.__dict__}')
@@ -1373,10 +1397,20 @@ class PbTdApi(object):
                         continue
 
             table.close()
-
+            self.warning_dict.pop('query_orders', None)
         except Exception as ex:
-            self.gateway.write_error(f'dbf扫描股票委托异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf扫描股票委托异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_orders', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_orders': err_info})
 
     def query_orders_csv(self):
         """获取所有委托"""
@@ -1566,9 +1600,20 @@ class PbTdApi(object):
                     continue
 
             table.close()
+            self.warning_dict.pop('query_update_order', None)
         except Exception as ex:
-            self.gateway.write_error(f'dbf查询委托库异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf查询委托库异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_update_order', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_update_order': err_info})
 
     def query_update_orders_csv(self):
         """扫描批量下单的委托查询(csv文件格式）"""
@@ -1646,11 +1691,11 @@ class PbTdApi(object):
             table = dbf.Table(trades_dbf, codepage='cp936')
             table.open(dbf.READ_ONLY)
             for data in table:
-                if str(data.zjzh).strip()!= self.userid: # ["资金账户"]
+                if str(data.zjzh).strip() != self.userid:  # ["资金账户"]
                     continue
 
-                sys_orderid = str(data.wtxh) # ["委托序号"]
-                sys_tradeid = str(data.cjxh) # ["成交序号"]
+                sys_orderid = str(data.wtxh)  # ["委托序号"]
+                sys_tradeid = str(data.cjxh)  # ["成交序号"]
 
                 # 检查是否存在本地trades缓存中
                 trade = self.trades.get(sys_tradeid, None)
@@ -1658,10 +1703,10 @@ class PbTdApi(object):
 
                 # 如果交易不再本地映射关系
                 if trade is None and order is None:
-                    trade_date = str(data.cjrq).strip() #["成交日期"]
-                    trade_time = str(data.cjsj).strip() #["成交时间"]
+                    trade_date = str(data.cjrq).strip()  # ["成交日期"]
+                    trade_time = str(data.cjsj).strip()  # ["成交时间"]
                     trade_dt = datetime.strptime(f'{trade_date} {trade_time}', "%Y%m%d %H%M%S")
-                    direction = DIRECTION_STOCK_NAME2VT.get(str(data.wtfx).strip()) # ["委托方向"]
+                    direction = DIRECTION_STOCK_NAME2VT.get(str(data.wtfx).strip())  # ["委托方向"]
                     offset = Offset.NONE
                     if direction is None:
                         direction = Direction.NET
@@ -1671,8 +1716,8 @@ class PbTdApi(object):
                         offset = Offset.CLOSE
                     trade = TradeData(
                         gateway_name=self.gateway_name,
-                        symbol=str(data.zqdm).strip(), # ["证券代码"]
-                        exchange=EXCHANGE_NAME2VT.get(str(data.jysc).strip()), # ["交易市场"]
+                        symbol=str(data.zqdm).strip(),  # ["证券代码"]
+                        exchange=EXCHANGE_NAME2VT.get(str(data.jysc).strip()),  # ["交易市场"]
                         orderid=sys_tradeid,
                         tradeid=sys_tradeid,
                         sys_orderid=sys_orderid,
@@ -1680,21 +1725,30 @@ class PbTdApi(object):
                         direction=direction,
                         offset=offset,
                         price=float(data.cjjg),  # ["成交价格"]
-                        volume=float(data.cjsl), # ["成交数量"]
+                        volume=float(data.cjsl),  # ["成交数量"]
                         datetime=trade_dt,
                         time=trade_dt.strftime('%H:%M:%S'),
-                        trade_amount=float(data.cjje), # ["成交金额"]
-                        commission=float(data.zfy) # ["总费用"]
+                        trade_amount=float(data.cjje),  # ["成交金额"]
+                        commission=float(data.zfy)  # ["总费用"]
                     )
                     self.trades[sys_tradeid] = trade
                     self.gateway.on_trade(copy.copy(trade))
                     continue
             table.close()
-
+            self.warning_dict.pop('query_trades', None)
         except Exception as ex:
-            self.gateway.write_error(f'dbf扫描股票成交异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
 
+            err_msg = f'dbf扫描股票成交异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_trades', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_trades': err_info})
 
     def query_trades_csv(self):
         """获取所有成交"""
@@ -1835,9 +1889,21 @@ class PbTdApi(object):
                     continue
 
             table.close()
+            self.warning_dict.pop('query_update_trade', None)
+
         except Exception as ex:
-            self.gateway.write_error(f'dbf查询成交库异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf查询成交库异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_update_trade', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_update_trade': err_info})
 
     def query_update_trades_csv(self):
         """获取接口的csv成交更新"""
@@ -1954,7 +2020,7 @@ class PbTdApi(object):
                         self.gateway.write_error(msg=f'{order.direction.value},{order.vt_symbol},{err_msg}',
                                                  error={"ErrorID": err_id, "ErrorMsg": "委托失败"})
 
-                    if sys_orderid != '0':
+                    if sys_orderid not in ['0','None']:
                         self.gateway.order_manager.update_orderid_map(local_orderid=local_orderid,
                                                                       sys_orderid=sys_orderid)
                         order.sys_orderid = sys_orderid
@@ -1969,10 +2035,21 @@ class PbTdApi(object):
                     self.unchecked_orderids.remove(local_orderid)
 
             table.close()
+            self.warning_dict.pop('query_send_order', None)
 
         except Exception as ex:
-            self.gateway.write_error(f'dbf查询系统委托号异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf查询系统委托号异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('query_send_order', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'query_send_order': err_info})
 
     def check_send_order_csv(self):
         """检查更新委托文件csv"""
@@ -2097,9 +2174,21 @@ class PbTdApi(object):
             table.append(data)
             # 关闭dbf文件
             table.close()
+            self.warning_dict.pop('send_order', None)
         except Exception as ex:
-            self.gateway.write_error(f'dbf添加发单记录异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf添加发单记录异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('send_order', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'send_order': err_info})
+
             return ""
 
         # 设置状态为提交中
@@ -2213,8 +2302,8 @@ class PbTdApi(object):
 
             sys_orderid = self.gateway.order_manager.get_sys_orderid(req.orderid)
 
-            if sys_orderid is None or len(sys_orderid) == 0:
-                self.gateway.write_error(f'订单{req.orderid}=》系统委托id不存在，撤单失败')
+            if sys_orderid is None or len(sys_orderid) == 0 or sys_orderid == 'None':
+                self.gateway.write_error(f'订单{req.orderid}=》系统委托id:{sys_orderid}不存在，撤单失败')
                 return False
 
             data = (
@@ -2240,10 +2329,22 @@ class PbTdApi(object):
             table.append(data)
             # 关闭dbf文件
             table.close()
+            self.warning_dict.pop('cancel_order', None)
             return True
         except Exception as ex:
-            self.gateway.write_error(f'dbf委托撤单异常:{str(ex)}')
-            self.gateway.write_error(traceback.format_exc())
+
+            err_msg = f'dbf委托撤单异常:{str(ex)}'
+            tra_msg = traceback.format_exc()
+            err_info = self.warning_dict.get('cancel_order', {})
+            err_count = err_info.get('err_count', 1)
+            if err_count > 10:
+                self.gateway.write_error(err_msg)
+                self.gateway.write_error(tra_msg)
+            else:
+                err_count += 1
+                err_info.update({'err_count': err_count, 'err_msg': err_msg, 'tra_msg': tra_msg})
+                self.warning_dict.update({'cancel_order': err_info})
+
             return False
 
     def cancel_order_csv(self, req: CancelRequest):

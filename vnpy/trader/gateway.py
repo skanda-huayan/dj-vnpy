@@ -140,7 +140,7 @@ class BaseGateway(ABC):
         """市场行情推送"""
         # bar, 或者 barDict
         self.on_event(EVENT_BAR, bar)
-        self.write_log(f'on_bar Event:{bar.__dict__}')
+        #self.write_log(f'on_bar Event:{bar.__dict__}')
 
     def on_trade(self, trade: TradeData) -> None:
         """

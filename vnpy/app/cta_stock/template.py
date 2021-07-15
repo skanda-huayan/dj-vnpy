@@ -1008,7 +1008,7 @@ class CtaStockTemplate(CtaTemplate):
             if len(grid.order_ids) > 0:
                 continue
 
-            if grid.volume == grid.traded_volume:
+            if grid.volume <= grid.traded_volume:
                 self.write_log(u'网格计划卖出:{}，已成交:{}'.format(grid.volume, grid.traded_volume))
                 self.tns_finish_sell_grid(grid)
                 continue
@@ -1033,30 +1033,31 @@ class CtaStockTemplate(CtaTemplate):
 
             # 实盘运行时，要加入市场买卖量的判断
             if not self.backtesting:
-                symbol_tick = self.cta_engine.get_tick(vt_symbol)
-                if symbol_tick is None:
+                cur_price = self.cta_engine.get_price(vt_symbol)
+                if not cur_price:
                     self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
-                    self.write_log(f'获取不到{vt_symbol}得tick,无法根据市场深度进行计算')
                     continue
 
-                symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
-                # 根据市场计算，前5档买单数量
-                if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
-                        symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
-                        and all(
-                    [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
-                     symbol_tick.bid_volume_5]):
-                    market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
-                    market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
-                    org_sell_volume = sell_volume
-                    if market_bid_volumes > 0 and market_ask_volumes > 0 and org_sell_volume >= 2 * symbol_volume_tick:
-                        sell_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, sell_volume)
-                        sell_volume = max(round_to(value=sell_volume, target=symbol_volume_tick), symbol_volume_tick)
-                        if org_sell_volume != sell_volume:
-                            self.write_log(u'修正批次卖出{}数量:{}=>{}'.format(vt_symbol, org_sell_volume, sell_volume))
+                symbol_tick = self.cta_engine.get_tick(vt_symbol)
+                if symbol_tick:
+                    symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
+                    # 根据市场计算，前5档买单数量
+                    if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
+                            symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
+                            and all(
+                        [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
+                         symbol_tick.bid_volume_5]):
+                        market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
+                        market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
+                        org_sell_volume = sell_volume
+                        if market_bid_volumes > 0 and market_ask_volumes > 0 and org_sell_volume >= 2 * symbol_volume_tick:
+                            sell_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, sell_volume)
+                            sell_volume = max(round_to(value=sell_volume, target=symbol_volume_tick), symbol_volume_tick)
+                            if org_sell_volume != sell_volume:
+                                self.write_log(u'修正批次卖出{}数量:{}=>{}'.format(vt_symbol, org_sell_volume, sell_volume))
 
             # 获取当前价格
-            sell_price = self.cta_engine.get_price(vt_symbol) - self.cta_engine.get_price_tick(vt_symbol)
+            sell_price =  cur_price - self.cta_engine.get_price_tick(vt_symbol)
             # 发出委托卖出
             vt_orderids = self.sell(
                 vt_symbol=vt_symbol,
@@ -1138,7 +1139,7 @@ class CtaStockTemplate(CtaTemplate):
             if len(grid.order_ids) > 0:
                 continue
 
-            if grid.volume == grid.traded_volume:
+            if grid.volume <= grid.traded_volume:
                 self.write_log(u'网格计划买入:{}，已成交:{}'.format(grid.volume, grid.traded_volume))
                 self.tns_finish_buy_grid(grid)
                 return
@@ -1157,6 +1158,10 @@ class CtaStockTemplate(CtaTemplate):
                 continue
 
             buy_volume = ordering_grid.volume - ordering_grid.traded_volume
+            # if buy_volume <= 0:
+            #     self.write_error(f'{grid.vt_symbol} 已买入数量:{ordering_grid.traded_volume} 超过委托数量:{ordering_grid.volume}')
+            #     continue
+
             min_trade_volume = self.cta_engine.get_volume_tick(vt_symbol)
             if availiable < buy_volume * cur_price:
                 self.write_error(f'可用资金{availiable},不满足买入{vt_symbol},数量:{buy_volume} X价格{cur_price}')
@@ -1175,17 +1180,18 @@ class CtaStockTemplate(CtaTemplate):
             # 实盘运行时，要加入市场买卖量的判断
             if not self.backtesting and 'market' in ordering_grid.snapshot:
                 symbol_tick = self.cta_engine.get_tick(vt_symbol)
-                # 根据市场计算，前5档买单数量
-                if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
-                        symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
-                        and all(
-                    [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
-                     symbol_tick.bid_volume_5]):
-                    market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
-                    market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
-                    if market_bid_volumes > 0 and market_ask_volumes > 0:
-                        buy_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, buy_volume)
-                        buy_volume = max(buy_volume - buy_volume % min_trade_volume, min_trade_volume)
+                if symbol_tick:
+                    # 根据市场计算，前5档买单数量
+                    if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
+                            symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
+                            and all(
+                        [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
+                         symbol_tick.bid_volume_5]):
+                        market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
+                        market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
+                        if market_bid_volumes > 0 and market_ask_volumes > 0:
+                            buy_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, buy_volume)
+                            buy_volume = max(buy_volume - buy_volume % min_trade_volume, min_trade_volume)
 
             buy_price = cur_price + self.cta_engine.get_price_tick(vt_symbol) * 10
 

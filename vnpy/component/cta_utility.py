@@ -73,10 +73,31 @@ def check_bi_not_rt(kline: CtaLineBar, direction: Direction) -> bool:
     if not kline.cur_bi or kline.cur_bi.direction != direction:
         return False
 
-    if kline.cur_bi.direction == kline.fenxing_list[-1].direction:
-        if not kline.fenxing_list[-1].is_rt:
+    if not kline.cur_fenxing:
+        return False
+
+    if kline.cur_bi.direction == kline.cur_fenxing.direction:
+        if not kline.cur_fenxing.is_rt:
             return True
         else:
+            if direction == 1:
+                # 判断还没走完的bar，是否满足顶分型
+                if float(kline.cur_fenxing.high) == float(kline.high_array[-1]) \
+                    and kline.cur_fenxing.index == kline.index_list[-1] \
+                    and kline.line_bar[-1].datetime.strftime('%Y-%m-%d %H:%M:%S') > kline.cur_fenxing.index\
+                    and kline.line_bar[-1].high_price < float(kline.cur_fenxing.high) \
+                        and kline.line_bar[-1].low_price < kline.line_bar[-2].low_price:
+                    return True
+
+            else:
+                # 判断还没走完的bar，是否满足底分型
+                if float(kline.cur_fenxing.low) == float(kline.low_array[-1]) \
+                        and kline.cur_fenxing.index == kline.index_list[-1] \
+                        and kline.line_bar[-1].datetime.strftime('%Y-%m-%d %H:%M:%S') > kline.cur_fenxing.index \
+                        and kline.line_bar[-1].low_price > float(kline.cur_fenxing.low) \
+                        and kline.line_bar[-1].high_price < kline.line_bar[-2].high_price:
+                    return True
+
             return False
 
     return True
@@ -274,9 +295,14 @@ def check_chan_xt_five_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
                 or (min_low == bi_3.low and bi_5.high > bi_3.high > bi_5.low > bi_3.low):
             v = ChanSignals.LG0.value
 
-        # 五笔三买，要求bi_5.high是最高点
-        if max(bi_1.low, bi_3.low) < min(bi_1.high, bi_3.high) < bi_5.low and bi_5.high == max_high:
-            v = ChanSignals.LI0.value
+        # 五笔三买，要求bi_5.high是最高点, 或者bi_4.height，超过笔2、笔3两倍
+        if max(bi_1.low, bi_3.low) < min(bi_1.high, bi_3.high) < bi_5.low:
+            if bi_5.high == max_high:
+                v = ChanSignals.LI0.value
+            elif bi_4.low == min_low and bi_1.high == max_high \
+                    and bi_4.height > max(bi_1.height, bi_2.height, bi_3.height) \
+                    and bi_4.height > 2 * max(bi_2.height, bi_3.height):
+                v = ChanSignals.LI0.value
 
         # 向上三角扩张中枢
         if bi_1.high < bi_3.high < bi_5.high and bi_1.low > bi_3.low > bi_5.low:
@@ -306,8 +332,14 @@ def check_chan_xt_five_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
             v = ChanSignals.SG0.value
 
         # 五笔三卖，要求bi_5.low是最低点，中枢可能是1~3
-        if min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low) > bi_5.high and bi_5.low == min_low:
-            v = ChanSignals.SI0.value
+        if min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low) > bi_5.high:
+            if bi_5.low == min_low:
+                v = ChanSignals.SI0.value
+            elif bi_4.high == max_high and bi_1.low == min_low \
+                    and bi_4.height > max(bi_1.height, bi_2.height, bi_3.height)\
+                    and bi_4.height > 2 * max(bi_2.height,bi_3.height):
+                v = ChanSignals.SI0.value
+            # elif bi_1.high == max_high and bi_1.low == min_low:
 
         # 向下三角扩张中枢
         if bi_1.high < bi_3.high < bi_5.high and bi_1.low > bi_3.low > bi_5.low:
@@ -369,7 +401,7 @@ def check_chan_xt_seven_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
         if bi_5.high == max_high and bi_5.high > bi_7.high \
                 and bi_5.low > bi_7.low > min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low):
             v = ChanSignals.LI0.value
-
+        #
     elif bi_7.direction == 1:
         # 顶背驰
         if bi_1.low == min_low and bi_7.high == max_high:

@@ -155,6 +155,8 @@ class CtaEngine(BaseEngine):
 
         self.health_status = {}
 
+        self.symbol_bar_dict = {}  # vt_symbol: bar(一分钟bar)
+
     def init_engine(self):
         """
         """
@@ -266,6 +268,9 @@ class CtaEngine(BaseEngine):
     def process_bar_event(self, event: Event):
         """处理bar到达事件"""
         bar = event.data
+        # 更新bar
+        self.symbol_bar_dict[bar.vt_symbol] = bar
+        # 寻找订阅了该bar的策略
         strategies = self.symbol_strategy_map[bar.vt_symbol]
         if not strategies:
             return
@@ -866,6 +871,10 @@ class CtaEngine(BaseEngine):
         tick = self.main_engine.get_tick(vt_symbol)
         if tick:
             return tick.last_price
+
+        bar = self.symbol_bar_dict.get(vt_symbol)
+        if bar:
+            return bar.close_price
 
         return None
 

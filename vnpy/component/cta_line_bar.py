@@ -813,8 +813,21 @@ class CtaLineBar(object):
         if not self.is_7x24 and (tick.datetime.hour == 8 or tick.datetime.hour == 20):
             self.write_log(u'{}竞价排名tick时间:{}'.format(self.name, tick.datetime))
             return
-        self.cur_datetime = tick.datetime
 
+        # 过滤一些 异常的tick价格
+        if self.cur_price is not None and self.cur_price !=0 and tick.last_price is not None and tick.last_price != 0:
+            # 前后价格超过10%
+            if abs(tick.last_price - self.cur_price)/self.cur_price >= 0.1:
+                # 是同一天,都不接受这些tick
+                if self.cur_datetime and self.cur_datetime.date == tick.datetime.date:
+                    return
+                else:
+                    # 不是同一天，只过滤当前这个tick，如果下个tick还是有变化，就接受
+                    self.cur_price = tick.last_price
+                    self.cur_datetime = tick.datetime
+                return
+
+        self.cur_datetime = tick.datetime
         self.cur_tick = copy.copy(tick)
 
         # 兼容 标准套利合约，它没有last_price
@@ -5613,6 +5626,20 @@ class CtaLineBar(object):
             self.__count_chanlun()
         bi_list = self.bi_list[-bi_len:]
         return round(sum([bi.height for bi in bi_list]) / max(1, len(bi_list)), self.round_n)
+
+    def duan_atan_ma(self, duan_len=20):
+        """返回段得平均斜率"""
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        duan_list = self.duan_list[-duan_len:]
+        return round(sum([d.atan for d in duan_list]) / max(1, len(duan_list)), self.round_n)
+
+    def bi_atan_ma(self, bi_len=20):
+        """返回分笔得平均斜率"""
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        bi_list = self.bi_list[-bi_len:]
+        return round(sum([bi.atan for bi in bi_list]) / max(1, len(bi_list)), self.round_n)
 
     def export_chan(self):
         """
