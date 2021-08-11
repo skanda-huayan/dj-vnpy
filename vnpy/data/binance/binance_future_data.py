@@ -4,6 +4,7 @@ import os
 import json
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
+from time import sleep
 from vnpy.api.rest.rest_client import RestClient
 from vnpy.trader.object import (
     Interval,
@@ -149,6 +150,9 @@ class BinanceFutureData(RestClient):
                 # Update start time
                 start_dt = end + TIMEDELTA_MAP[req.interval] * req.interval_num
                 start_time = int(datetime.timestamp(start_dt))
+
+            # 等待0.1秒
+            sleep(0.1)
 
         return bars
 
