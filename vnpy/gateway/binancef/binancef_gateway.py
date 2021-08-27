@@ -9,6 +9,7 @@ import time
 import json
 from copy import copy
 from datetime import datetime, timedelta
+from time import sleep
 from enum import Enum
 from threading import Lock
 from typing import Dict, List
@@ -814,7 +815,7 @@ class BinancefRestApi(RestClient):
                 # Update start time
                 start_dt = bar.datetime + TIMEDELTA_MAP[req.interval]
                 start_time = int(datetime.timestamp(start_dt))
-
+                sleep(0.1)
         return history
 
 
