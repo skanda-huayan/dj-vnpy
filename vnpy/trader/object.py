@@ -135,6 +135,7 @@ class OrderData(BaseData):
     symbol: str
     exchange: Exchange
     orderid: str
+    name: str = ""
     sys_orderid: str = ""
     accountid: str = ""
     type: OrderType = OrderType.LIMIT
@@ -153,6 +154,8 @@ class OrderData(BaseData):
         self.vt_symbol = f"{self.symbol}.{self.exchange.value}"
         self.vt_orderid = f"{self.gateway_name}.{self.orderid}"
         self.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        if len(self.name) == 0:
+            self.name = self.vt_symbol
 
     def is_active(self) -> bool:
         """
@@ -184,6 +187,7 @@ class TradeData(BaseData):
     exchange: Exchange
     orderid: str
     tradeid: str
+    name: str = ""
     sys_orderid: str = ""
     accountid: str = ""
 
@@ -208,7 +212,8 @@ class TradeData(BaseData):
         self.vt_orderid = f"{self.gateway_name}.{self.orderid}"
         self.vt_tradeid = f"{self.gateway_name}.{self.tradeid}"
         self.vt_accountid = f"{self.gateway_name}.{self.accountid}"
-
+        if len(self.name) == 0:
+            self.name = self.vt_symbol
 
 @dataclass
 class PositionData(BaseData):

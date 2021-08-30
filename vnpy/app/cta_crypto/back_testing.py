@@ -1921,7 +1921,7 @@ class BackTestingEngine(object):
         # 返回回测结果
         d = {}
         d['init_capital'] = self.init_capital
-        d['profit'] = self.cur_capital - self.init_capital
+        d['profit'] = self.net_capital - self.init_capital
         d['net_capital'] = self.net_capital
         d['max_capital'] = self.max_net_capital  # 取消原 maxCapital
 
@@ -2006,8 +2006,8 @@ class BackTestingEngine(object):
         result_info.update({u'期末资金': d['net_capital']})
         self.output(u'期末资金：\t%s' % format_number(d['net_capital']))
 
-        result_info.update({u'平仓盈亏': d['profit']})
-        self.output(u'平仓盈亏：\t%s' % format_number(d['profit']))
+        result_info.update({u'总盈亏': d['profit']})
+        self.output(u'总盈亏：\t%s' % format_number(d['profit']))
 
         result_info.update({u'资金最高净值': d['max_capital']})
         self.output(u'资金最高净值：\t%s' % format_number(d['max_capital']))

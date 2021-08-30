@@ -5,6 +5,9 @@ import sys
 from abc import ABC
 from enum import Enum
 from logging import INFO, ERROR
+import json
+import numpy as np
+import datetime
 from vnpy.trader.constant import Direction  # noqa
 
 
@@ -71,3 +74,20 @@ class CtaComponent(ABC):
             self.strategy.write_log(msg=content, level=level)
         else:
             print(content, file=sys.stderr)
+
+
+class MyEncoder(json.JSONEncoder):
+    """
+    自定义转换器，处理np,datetime等不能被json转换得问题
+    """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            return super(MyEncoder, self).default(obj)

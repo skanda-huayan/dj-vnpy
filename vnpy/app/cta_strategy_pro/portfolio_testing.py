@@ -452,7 +452,14 @@ class PortfolioTestingEngine(BackTestingEngine):
         ticks = []
         if not os.path.isfile(file_path):
             self.write_log(u'{}文件不存在'.format(file_path))
-            return None
+            file_path = os.path.abspath(
+                os.path.join(
+                    tick_folder,
+                    tick_date.strftime('%Y%m'),
+                    '{}_{}.csv'.format(symbol.lower(), tick_date.strftime('%Y%m%d'))))
+            if not os.path.isfile(file_path):
+                self.write_log(u'{}文件不存在'.format(file_path))
+                return None
         try:
             df = pd.read_csv(file_path, parse_dates=False)
             # datetime,symbol,exchange,last_price,highest,lowest,volume,amount,open_interest,upper_limit,lower_limit,
@@ -589,8 +596,32 @@ class PortfolioTestingEngine(BackTestingEngine):
                         time=dt.strftime('%H:%M:%S.%f'),
                         trading_day=test_day.strftime('%Y-%m-%d'),
                         last_price=last_price,
-                        volume=tick_data['volume']
+                        volume=tick_data['volume'],
+                        ask_price_1=float(tick_data.get('ask_price_1',0)),
+                        ask_volume_1=int(tick_data.get('ask_volume_1',0)),
+                        bid_price_1=float(tick_data.get('bid_price_1',0)),
+                        bid_volume_1=int(tick_data.get('bid_volume_1',0))
                     )
+                    if tick_data.get('ask_price_5',0) > 0:
+                        tick.ask_price_2 = float(tick_data.get('ask_price_2',0))
+                        tick.ask_volume_2 = int(tick_data.get('ask_volume_2', 0))
+                        tick.bid_price_2 = float(tick_data.get('bid_price_2', 0))
+                        tick.bid_volume_2 = int(tick_data.get('bid_volume_2', 0))
+
+                        tick.ask_price_3 = float(tick_data.get('ask_price_3', 0))
+                        tick.ask_volume_3 = int(tick_data.get('ask_volume_3', 0)),
+                        tick.bid_price_3 = float(tick_data.get('bid_price_3', 0)),
+                        tick.bid_volume_3 = int(tick_data.get('bid_volume_3', 0))
+
+                        tick.ask_price_4 = float(tick_data.get('ask_price_4', 0))
+                        tick.ask_volume_4 = int(tick_data.get('ask_volume_4', 0)),
+                        tick.bid_price_4 = float(tick_data.get('bid_price_4', 0)),
+                        tick.bid_volume_4 = int(tick_data.get('bid_volume_4', 0))
+
+                        tick.ask_price_5 = float(tick_data.get('ask_price_5', 0))
+                        tick.ask_volume_5 = int(tick_data.get('ask_volume_5', 0)),
+                        tick.bid_price_5 = float(tick_data.get('bid_price_5', 0)),
+                        tick.bid_volume_5 = int(tick_data.get('bid_volume_5', 0))
 
                     self.new_tick(tick)
 

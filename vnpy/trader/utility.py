@@ -347,6 +347,9 @@ def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_l
     :param line_length: 行数据的长度
     :return: None，文件不存在，或者时间格式不正确
     """
+    if not os.path.exists(file_name):
+        return False
+
     with open(file_name, 'r') as f:
         f_size = os.path.getsize(file_name)
         if f_size < line_length:
@@ -1442,3 +1445,4 @@ def get_remote_file(remote_ip, remote_file_path, mode='rb'):
     except Exception as ex:
         print(u'打开远程目录异常:{}'.format(str(ex)))
         return None
+

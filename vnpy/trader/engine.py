@@ -171,6 +171,8 @@ class MainEngine:
         gateway = self.get_gateway(gateway_name)
         if gateway:
             return gateway.get_default_setting()
+        else:
+            self.write_error(f'获取网格设置时，找不到{gateway_name}')
         return None
 
     def get_all_gateway_names(self) -> List[str]:
@@ -209,6 +211,8 @@ class MainEngine:
             except Exception as ex:
                 msg = f'gateway:{gateway_name}启动连接失败:{str(ex)}'
                 self.write_log(msg=msg)
+        else:
+            self.write_error(f'连接{gateway_name}时，系统找不到{gateway_name}')
 
     def subscribe(self, req: SubscribeRequest, gateway_name: str) -> None:
         """
@@ -219,6 +223,8 @@ class MainEngine:
             gateway = self.get_gateway(gateway_name)
             if gateway:
                 gateway.subscribe(req)
+            else:
+                self.write_error(f'订阅合约时，找不到{gateway_name}')
         else:
             for gateway in self.gateways.values():
                 if gateway:
@@ -239,6 +245,7 @@ class MainEngine:
         if gateway:
             return gateway.send_order(req)
         else:
+            self.write_error(f'发送委托时，找不到{gateway_name}')
             return ""
 
     def cancel_order(self, req: CancelRequest, gateway_name: str) -> bool:
@@ -253,6 +260,8 @@ class MainEngine:
         gateway = self.get_gateway(gateway_name)
         if gateway:
             return gateway.cancel_order(req)
+        else:
+            self.write_error(f'撤单时，找不到{gateway_name}')
         return False
 
     def send_orders(self, reqs: Sequence[OrderRequest], gateway_name: str) -> List[str]:
@@ -263,6 +272,7 @@ class MainEngine:
         if gateway:
             return gateway.send_orders(reqs)
         else:
+            self.write_error(f'批量发单时，找不到{gateway_name}')
             return ["" for req in reqs]
 
     def cancel_orders(self, reqs: Sequence[CancelRequest], gateway_name: str) -> None:
@@ -271,6 +281,8 @@ class MainEngine:
         gateway = self.get_gateway(gateway_name)
         if gateway:
             gateway.cancel_orders(reqs)
+        else:
+            self.write_error(f'批量撤单时，找不到{gateway_name}')
 
     def query_history(self, req: HistoryRequest, gateway_name: str) -> Optional[List[BarData]]:
         """
@@ -280,7 +292,7 @@ class MainEngine:
         if gateway:
             return gateway.query_history(req)
         else:
-            self.write_error(f'网关为空，请检查合约得网关是否与连接得网关一致')
+            self.write_error(f'找不到网关{gateway_name}，请检查合约得网关是否与连接得网关一致')
             return None
 
     def close(self) -> None:

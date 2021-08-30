@@ -28,8 +28,9 @@ from vnpy.component.base import (
     MARKET_ZJ)
 from vnpy.component.cta_period import CtaPeriod, Period
 from vnpy.trader.object import BarData, TickData
-from vnpy.trader.constant import Interval, Color
+from vnpy.trader.constant import Interval, Color, ChanSignals
 from vnpy.trader.utility import round_to, get_trading_date, get_underlying_symbol
+from vnpy.component.cta_utility import check_chan_xt,check_chan_xt_three_bi, check_qsbc_2nd
 
 try:
     from vnpy.component.chanlun import ChanGraph, ChanLibrary
@@ -206,6 +207,8 @@ class CtaLineBar(object):
         self.export_bi_filename = None  # 通过缠论笔csv文件
         self.export_zs_filename = None  # 通过缠论的笔中枢csv文件
         self.export_duan_filename = None  # 通过缠论的线段csv文件
+        self.export_xt_filename = None  # 缠论笔的形态csv文件, 满足 strategy_name_xt_n_signals.csv
+                                        # n 会转换为 3，5，7，9，11，13
 
         self.pre_bi_start = None  # 前一个笔的时间
         self.pre_zs_start = None  # 前一个中枢的时间
@@ -295,6 +298,8 @@ class CtaLineBar(object):
         self.param_list.append('para_ema1_len')  # 三条EMA均线
         self.param_list.append('para_ema2_len')
         self.param_list.append('para_ema3_len')
+        self.param_list.append('para_ema4_len')
+        self.param_list.append('para_ema5_len')
 
         self.param_list.append('para_dmi_len')
         self.param_list.append('para_dmi_max')
@@ -365,6 +370,7 @@ class CtaLineBar(object):
         self.param_list.append('para_bd_len')
 
         self.param_list.append('para_active_chanlun')  # 激活缠论
+        self.param_list.append('para_active_chan_xt')  # 激活缠论的形态分析
 
     def init_properties(self):
         """
@@ -417,6 +423,8 @@ class CtaLineBar(object):
         self.para_ema1_len = 0  # 13       # 第一根EMA均线的周期长度
         self.para_ema2_len = 0  # 21       # 第二根EMA均线的周期长度
         self.para_ema3_len = 0  # 120      # 第三根EMA均线的周期长度
+        self.para_ema4_len = 0  # 120      # 第四根EMA均线的周期长度
+        self.para_ema5_len = 0  # 120      # 第五根EMA均线的周期长度
 
         self.para_dmi_len = 0  # 14           # DMI的计算周期
         self.para_dmi_max = 0  # 30           # Dpi和Mdi的突破阈值
@@ -538,10 +546,14 @@ class CtaLineBar(object):
         self.line_ema1 = []  # K线的EMA1均线，周期是para_ema1_len1，不包含当前bar
         self.line_ema2 = []  # K线的EMA2均线，周期是para_ema1_len2，不包含当前bar
         self.line_ema3 = []  # K线的EMA3均线，周期是para_ema1_len3，不包含当前bar
+        self.line_ema4 = []  # K线的EMA4均线，周期是para_ema1_len4，不包含当前bar
+        self.line_ema5 = []  # K线的EMA5均线，周期是para_ema1_len5，不包含当前bar
 
         self._rt_ema1 = None  # K线的实时EMA(para_ema1_len)
         self._rt_ema2 = None  # K线的实时EMA(para_ema2_len)
         self._rt_ema3 = None  # K线的实时EMA(para_ema3_len)
+        self._rt_ema4 = None  # K线的实时EMA(para_ema4_len)
+        self._rt_ema5 = None  # K线的实时EMA(para_ema5_len)
 
         # K线的DMI( Pdi，Mdi，ADX，Adxr) 计算数据
         self.cur_pdi = 0  # bar内的升动向指标，即做多的比率
@@ -793,6 +805,14 @@ class CtaLineBar(object):
         self._bi_zs_list = []  # 笔中枢列表
         self._duan_list = []  # 段列表
         self._duan_zs_list = []  # 段中枢列表
+        self.para_active_chan_xt = False  # 是否激活czsc缠论形态识别
+        self.xt_3_signals = []  # czsc 三笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
+        self.xt_5_signals = []  # czsc 五笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
+        self.xt_7_signals = []  # czsc 七笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
+        self.xt_9_signals = []  # czsc 九笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
+        self.xt_11_signals = []  # czsc 11笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
+        self.xt_13_signals = []  # czsc 13笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
+        self.xt_2nd_signals = [] # 趋势背驰2买或趋势背驰2卖信号
 
     def set_params(self, setting: dict = {}):
         """设置参数"""
@@ -828,7 +848,7 @@ class CtaLineBar(object):
                 return
 
         self.cur_datetime = tick.datetime
-        self.cur_tick = copy.copy(tick)
+        self.cur_tick = tick  #copy.copy(tick)
 
         # 兼容 标准套利合约，它没有last_price
         if self.cur_tick.last_price is None or self.cur_tick.last_price == 0:
@@ -842,7 +862,7 @@ class CtaLineBar(object):
             self.cur_price = self.cur_tick.last_price
 
         # 3.生成x K线，若形成新Bar，则触发OnBar事件
-        self.generate_bar(copy.copy(self.cur_tick))
+        self.generate_bar(self.cur_tick)  # copy.copy(self.cur_tick)
 
         # 更新curPeriod的High，low
         if self.cur_period is not None:
@@ -864,8 +884,8 @@ class CtaLineBar(object):
         self.cur_datetime = bar.datetime + timedelta(minutes=bar_freq)
 
         if self.bar_len == 0:
-            new_bar = copy.deepcopy(bar)
-            self.line_bar.append(new_bar)
+            #new_bar = copy.deepcopy(bar)
+            self.line_bar.append(bar)
             self.cur_trading_day = bar.trading_day
             self.on_bar(bar)
             return
@@ -910,8 +930,8 @@ class CtaLineBar(object):
 
         if is_new_bar:
             # 添加新的bar
-            new_bar = copy.deepcopy(bar)
-            self.line_bar.append(new_bar)
+            #new_bar = copy.deepcopy(bar)
+            self.line_bar.append(bar)  # new_bar
             # 将上一个Bar推送至OnBar事件
             self.on_bar(lastBar)
 
@@ -1007,6 +1027,9 @@ class CtaLineBar(object):
 
         # 输出缠论=》csv文件
         self.export_chan()
+
+        # 识别缠论分笔形态
+        self.update_chan_xt()
 
         # 回调上层调用者，将合成的 x分钟bar，回调给策略 def on_bar_x(self, bar: BarData):函数
         if self.cb_on_bar:
@@ -1120,6 +1143,12 @@ class CtaLineBar(object):
 
         if self.para_ema3_len > 0 and len(self.line_ema3) > 0:
             msg = msg + u',EMA({0}):{1}'.format(self.para_ema3_len, self.line_ema3[-1])
+
+        if self.para_ema4_len > 0 and len(self.line_ema4) > 0:
+            msg = msg + u',EMA({0}):{1}'.format(self.para_ema4_len, self.line_ema4[-1])
+
+        if self.para_ema5_len > 0 and len(self.line_ema5) > 0:
+            msg = msg + u',EMA({0}):{1}'.format(self.para_ema5_len, self.line_ema5[-1])
 
         if self.para_dmi_len > 0 and len(self.line_pdi) > 0:
             msg = msg + u',Pdi:{1};Mdi:{1};Adx:{2}'.format(self.line_pdi[-1], self.line_mdi[-1], self.line_adx[-1])
@@ -2506,13 +2535,16 @@ class CtaLineBar(object):
     def __count_ema(self):
         """计算K线的EMA1 和EMA2"""
 
-        if not (self.para_ema1_len > 0 or self.para_ema2_len > 0 or self.para_ema3_len > 0):  # 不计算
+        if not (self.para_ema1_len > 0 or self.para_ema2_len > 0 or self.para_ema3_len > 0
+                or self.para_ema4_len > 0 or self.para_ema5_len > 0):  # 不计算
             return
 
         ema1_data_len = min(self.para_ema1_len * 4, self.para_ema1_len + 40) if self.para_ema1_len > 0 else 0
         ema2_data_len = min(self.para_ema2_len * 4, self.para_ema2_len + 40) if self.para_ema2_len > 0 else 0
         ema3_data_len = min(self.para_ema3_len * 4, self.para_ema3_len + 40) if self.para_ema3_len > 0 else 0
-        max_data_len = max(ema1_data_len, ema2_data_len, ema3_data_len)
+        ema4_data_len = min(self.para_ema4_len * 4, self.para_ema4_len + 40) if self.para_ema4_len > 0 else 0
+        ema5_data_len = min(self.para_ema5_len * 4, self.para_ema5_len + 40) if self.para_ema5_len > 0 else 0
+        max_data_len = max(ema1_data_len, ema2_data_len, ema3_data_len, ema4_data_len, ema5_data_len)
         # 1、lineBar满足长度才执行计算
         if self.bar_len < max_data_len:
             self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算EMA需要：{1}'.
@@ -2524,7 +2556,7 @@ class CtaLineBar(object):
             count_len = min(self.para_ema1_len, self.bar_len - 1)
 
             # 3、获取前InputN周期(不包含当前周期）的K线
-            barEma1 = ta.EMA(self.close_array[-ema1_data_len:], count_len)[-1]
+            barEma1 = ta.EMA(self.close_array[-self.para_ema1_len * 4:], count_len)[-1]
             if np.isnan(barEma1):
                 return
             barEma1 = round(float(barEma1), self.round_n)
@@ -2539,7 +2571,7 @@ class CtaLineBar(object):
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
 
-            barEma2 = ta.EMA(self.close_array[-ema2_data_len:], count_len)[-1]
+            barEma2 = ta.EMA(self.close_array[-self.para_ema2_len * 4:], count_len)[-1]
             if np.isnan(barEma2):
                 return
             barEma2 = round(float(barEma2), self.round_n)
@@ -2553,7 +2585,7 @@ class CtaLineBar(object):
             count_len = min(self.bar_len - 1, self.para_ema3_len)
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
-            barEma3 = ta.EMA(self.close_array[-ema3_data_len:], count_len)[-1]
+            barEma3 = ta.EMA(self.close_array[-self.para_ema3_len * 4:], count_len)[-1]
             if np.isnan(barEma3):
                 return
             barEma3 = round(float(barEma3), self.round_n)
@@ -2562,16 +2594,47 @@ class CtaLineBar(object):
                 del self.line_ema3[0]
             self.line_ema3.append(barEma3)
 
+        # 计算第四条EMA均线
+        if self.para_ema4_len > 0:
+            count_len = min(self.bar_len - 1, self.para_ema4_len)
+
+            # 3、获取前InputN周期(不包含当前周期）的自适应均线
+            barEma4 = ta.EMA(self.close_array[-self.para_ema4_len * 4:], count_len)[-1]
+            if np.isnan(barEma4):
+                return
+            barEma4 = round(float(barEma4), self.round_n)
+
+            if len(self.line_ema4) > self.max_hold_bars:
+                del self.line_ema4[0]
+            self.line_ema4.append(barEma4)
+
+        # 计算第五条EMA均线
+        if self.para_ema5_len > 0:
+            count_len = min(self.bar_len - 1, self.para_ema5_len)
+
+            # 3、获取前InputN周期(不包含当前周期）的自适应均线
+            barEma5 = ta.EMA(self.close_array[-self.para_ema5_len * 4:], count_len)[-1]
+            if np.isnan(barEma5):
+                return
+            barEma5 = round(float(barEma5), self.round_n)
+
+            if len(self.line_ema5) > self.max_hold_bars:
+                del self.line_ema5[0]
+            self.line_ema5.append(barEma5)
+
     def rt_count_ema(self):
         """计算K线的EMA1 和EMA2"""
 
-        if not (self.para_ema1_len > 0 or self.para_ema2_len > 0 or self.para_ema3_len > 0):  # 不计算
+        if not (self.para_ema1_len > 0 or self.para_ema2_len > 0 or self.para_ema3_len > 0
+                or self.para_ema4_len > 0 or self.para_ema5_len > 0):  # 不计算
             return
 
         ema1_data_len = min(self.para_ema1_len * 4, self.para_ema1_len + 40) if self.para_ema1_len > 0 else 0
         ema2_data_len = min(self.para_ema2_len * 4, self.para_ema2_len + 40) if self.para_ema2_len > 0 else 0
         ema3_data_len = min(self.para_ema3_len * 4, self.para_ema3_len + 40) if self.para_ema3_len > 0 else 0
-        max_data_len = max(ema1_data_len, ema2_data_len, ema3_data_len)
+        ema4_data_len = min(self.para_ema4_len * 4, self.para_ema4_len + 40) if self.para_ema4_len > 0 else 0
+        ema5_data_len = min(self.para_ema5_len * 4, self.para_ema5_len + 40) if self.para_ema5_len > 0 else 0
+        max_data_len = max(ema1_data_len, ema2_data_len, ema3_data_len, ema4_data_len, ema5_data_len)
         # 1、lineBar满足长度才执行计算
         if self.bar_len < max_data_len:
             return
@@ -2581,7 +2644,7 @@ class CtaLineBar(object):
             count_len = min(self.para_ema1_len, self.bar_len)
 
             # 3、获取前InputN周期(不包含当前周期）的K线
-            barEma1 = ta.EMA(np.append(self.close_array[-ema1_data_len:], [self.cur_price]), count_len)[-1]
+            barEma1 = ta.EMA(np.append(self.close_array[-self.para_ema1_len * 4:], [self.cur_price]), count_len)[-1]
             if np.isnan(barEma1):
                 return
             self._rt_ema1 = round(float(barEma1), self.round_n)
@@ -2592,7 +2655,7 @@ class CtaLineBar(object):
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
 
-            barEma2 = ta.EMA(np.append(self.close_array[-ema2_data_len:], [self.cur_price]), count_len)[-1]
+            barEma2 = ta.EMA(np.append(self.close_array[-self.para_ema2_len * 4:], [self.cur_price]), count_len)[-1]
             if np.isnan(barEma2):
                 return
             self._rt_ema2 = round(float(barEma2), self.round_n)
@@ -2602,10 +2665,30 @@ class CtaLineBar(object):
             count_len = min(self.bar_len, self.para_ema3_len)
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
-            barEma3 = ta.EMA(np.append(self.close_array[-ema3_data_len:], [self.cur_price]), count_len)[-1]
+            barEma3 = ta.EMA(np.append(self.close_array[-self.para_ema3_len * 4:], [self.cur_price]), count_len)[-1]
             if np.isnan(barEma3):
                 return
             self._rt_ema3 = round(float(barEma3), self.round_n)
+
+        # 计算第四条EMA均线
+        if self.para_ema4_len > 0:
+            count_len = min(self.bar_len, self.para_ema4_len)
+
+            # 3、获取前InputN周期(不包含当前周期）的自适应均线
+            barEma4 = ta.EMA(np.append(self.close_array[-self.para_ema4_len * 4:], [self.cur_price]), count_len)[-1]
+            if np.isnan(barEma4):
+                return
+            self._rt_ema4 = round(float(barEma4), self.round_n)
+
+        # 计算第五条EMA均线
+        if self.para_ema5_len > 0:
+            count_len = min(self.bar_len, self.para_ema5_len)
+
+            # 3、获取前InputN周期(不包含当前周期）的自适应均线
+            barEma5 = ta.EMA(np.append(self.close_array[-self.para_ema5_len * 4:], [self.cur_price]), count_len)[-1]
+            if np.isnan(barEma5):
+                return
+            self._rt_ema5 = round(float(barEma5), self.round_n)
 
     @property
     def rt_ema1(self):
@@ -2627,6 +2710,20 @@ class CtaLineBar(object):
         if self._rt_ema3 is None and len(self.line_ema3) > 0:
             return self.line_ema3[-1]
         return self._rt_ema3
+
+    @property
+    def rt_ema4(self):
+        self.check_rt_funcs(self.rt_count_ema)
+        if self._rt_ema4 is None and len(self.line_ema4) > 0:
+            return self.line_ema4[-1]
+        return self._rt_ema4
+
+    @property
+    def rt_ema5(self):
+        self.check_rt_funcs(self.rt_count_ema)
+        if self._rt_ema5 is None and len(self.line_ema5) > 0:
+            return self.line_ema5[-1]
+        return self._rt_ema5
 
     def __count_dmi(self):
         """计算K线的DMI数据和条件"""
@@ -5806,7 +5903,7 @@ class CtaLineBar(object):
             return False
 
         # 当前段包含的分笔，必须大于3
-        if len(cur_duan.bi_list) < 3:
+        if len(cur_duan.bi_list) <= 3:
             return False
 
         # 获取倒数第二根同向分笔的结束dif值或macd值
@@ -6132,6 +6229,79 @@ class CtaLineBar(object):
 
         return False
 
+    def update_chan_xt(self):
+        """更新缠论形态"""
+        if not self.para_active_chan_xt:
+            return
+        bi_len = len(self.bi_list)
+        if bi_len < 3:
+            return
+
+        if self.cur_fenxing.is_rt:
+            return
+
+        bi_n = min(15, bi_len)
+
+        price = self.cur_bi.low if self.cur_bi.direction == -1 else self.cur_bi.high
+
+        for n in range(3, bi_n, 2):
+            # => 信号
+            if n == 3:
+                signal = check_chan_xt_three_bi(self, self.bi_list[-n:])
+            else:
+                signal = check_chan_xt(self, self.bi_list[-n:])
+            # => 信号列表
+            xt_signals = getattr(self, f'xt_{n}_signals')
+            if xt_signals is None:
+                continue
+            # => 上一信号
+            cur_signal = xt_signals[-1] if len(xt_signals) > 0 else None
+            # 不同笔开始时间
+            if cur_signal is None or cur_signal.get("start", "") != self.cur_bi.start:
+                # 新增
+                xt_signals.append({'start': self.cur_bi.start,
+                                   'end': self.cur_bi.end,
+                                   'price': price,
+                                   'signal': signal})
+                if len(xt_signals) > 200:
+                    del xt_signals[0]
+                if cur_signal is not None and self.export_xt_filename :
+                    self.append_data(
+                        file_name=self.export_xt_filename.replace('_n_',f'_{n}_'),
+                        dict_data=cur_signal,
+                        field_names=["start", "end", "price", "signal"]
+                    )
+            # 直接更新
+            else:
+                xt_signals[-1].update({'end': self.cur_bi.end,  'price': price,'signal': signal})
+
+        # 是否趋势二买
+        qsbc_2nd = ChanSignals.Other.value
+        if self.cur_bi.direction == -1:
+            if check_qsbc_2nd(big_kline=self, small_kline=None, signal_direction=Direction.LONG):
+                qsbc_2nd = ChanSignals.Q2L0.value
+        else:
+            if check_qsbc_2nd(big_kline=self, small_kline=None,signal_direction=Direction.SHORT):
+                qsbc_2nd = ChanSignals.Q2S0.value
+        cur_signal = self.xt_2nd_signals[-1] if len(self.xt_2nd_signals) > 0 else None
+        # 不同笔开始时间
+        if cur_signal is None or cur_signal.get("start", "") != self.cur_bi.start:
+            # 新增
+            self.xt_2nd_signals.append({'start': self.cur_bi.start,
+                               'end': self.cur_bi.end,
+                               'price': price,
+                               'signal': qsbc_2nd})
+            if cur_signal and self.export_xt_filename:
+                self.append_data(
+                    file_name=self.export_xt_filename.replace('_n_', f'_2nd_'),
+                    dict_data=cur_signal,
+                    field_names=["start", "end", "price", "signal"]
+                )
+        # 直接更新
+        else:
+            self.xt_2nd_signals[-1].update({'end': self.cur_bi.end, 'price': price, 'signal': qsbc_2nd})
+
+
 
     def write_log(self, content):
         """记录CTA日志"""
@@ -6334,6 +6504,22 @@ class CtaLineBar(object):
             indicator = {
                 'name': 'EMA{}'.format(self.para_ema3_len),
                 'attr_name': 'line_ema3',
+                'is_main': True,
+                'type': 'line'
+            }
+            indicators.update({indicator.get('name'): copy.copy(indicator)})
+        if isinstance(self.para_ema4_len, int) and self.para_ema4_len > 0:
+            indicator = {
+                'name': 'EMA{}'.format(self.para_ema4_len),
+                'attr_name': 'line_ema4',
+                'is_main': True,
+                'type': 'line'
+            }
+            indicators.update({indicator.get('name'): copy.copy(indicator)})
+        if isinstance(self.para_ema5_len, int) and self.para_ema5_len > 0:
+            indicator = {
+                'name': 'EMA{}'.format(self.para_ema5_len),
+                'attr_name': 'line_ema5',
                 'is_main': True,
                 'type': 'line'
             }
@@ -6820,9 +7006,9 @@ class CtaMinuteBar(CtaLineBar):
             is_new_bar = True
 
         if is_new_bar:
-            new_bar = copy.deepcopy(bar)
+            #new_bar = copy.deepcopy(bar)
             # 添加新的bar
-            self.line_bar.append(new_bar)
+            self.line_bar.append(bar)  # new_bar
             # 将上一个Bar推送至OnBar事件
             self.on_bar(lastBar)
         else:
@@ -7261,8 +7447,8 @@ class CtaDayBar(CtaLineBar):
         bar_len = len(self.line_bar)
 
         if bar_len == 0:
-            new_bar = copy.deepcopy(bar)
-            self.line_bar.append(new_bar)
+            #new_bar = copy.deepcopy(bar)
+            self.line_bar.append(bar) # new_bar
             self.cur_trading_day = bar.trading_day if bar.trading_day is not None else get_trading_date(bar.datetime)
             if bar_is_completed:
                 self.on_bar(bar)
@@ -7288,8 +7474,8 @@ class CtaDayBar(CtaLineBar):
 
         if is_new_bar:
             # 添加新的bar
-            new_bar = copy.deepcopy(bar)
-            self.line_bar.append(new_bar)
+            #new_bar = copy.deepcopy(bar)
+            self.line_bar.append(bar) # new_bar
             # 将上一个Bar推送至OnBar事件
             self.on_bar(lastBar)
         else:

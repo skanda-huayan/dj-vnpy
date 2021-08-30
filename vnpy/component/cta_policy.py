@@ -4,7 +4,7 @@ import os
 import json
 from datetime import datetime
 from collections import OrderedDict
-from vnpy.component.base import CtaComponent
+from vnpy.component.base import CtaComponent, MyEncoder
 from vnpy.trader.utility import get_folder_path
 
 TNS_STATUS_OBSERVATE = 'observate'
@@ -14,24 +14,6 @@ TNS_STATUS_OPENED = 'opened'
 TNS_STATUS_CLOSED = 'closed'
 
 import numpy as np
-
-
-class MyEncoder(json.JSONEncoder):
-    """
-    自定义转换器，处理np,datetime等不能被json转换得问题
-    """
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, datetime):
-            return obj.strftime('%Y-%m-%d %H:%M:%S')
-        else:
-            return super(MyEncoder, self).default(obj)
-
 
 class CtaPolicy(CtaComponent):
     """

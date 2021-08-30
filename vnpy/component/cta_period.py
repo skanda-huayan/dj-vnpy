@@ -1,6 +1,6 @@
 # encoding: UTF-8
 
-# 周期类，定义CTA的五种周期，及其周期变换矩阵
+# 周期状态类，定义CTA的多种周期状态，及其状态变换矩阵
 from enum import Enum
 from datetime import datetime
 
@@ -9,8 +9,12 @@ from datetime import datetime
 class Period(Enum):
     INIT = u'初始状态'
     LONG = u'多'
+    LONG_STOP = u'止涨'
     SHORT = u'空'
+    SHORT_STOP = u'止跌'
     SHOCK = u'震荡'
+    SHOCK_LONG = u'震荡偏多'
+    SHOCK_SHORT = u'震荡偏空'
     LONG_EXTREME = u'极端多'
     SHORT_EXTREME = u'极端空'
 

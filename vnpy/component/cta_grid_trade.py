@@ -10,7 +10,7 @@ import traceback
 from collections import OrderedDict
 from datetime import datetime
 from vnpy.trader.utility import get_folder_path
-from vnpy.component.base import Direction, CtaComponent
+from vnpy.component.base import Direction, CtaComponent,MyEncoder
 
 """
 网格交易，用于套利单
@@ -894,7 +894,7 @@ class CtaGridTrade(CtaComponent):
         data = self.to_json()
 
         with open(grid_json_file, 'w', encoding='utf8') as f:
-            json_data = json.dumps(data, indent=4, ensure_ascii=False)
+            json_data = json.dumps(data, indent=4, ensure_ascii=False, cls=MyEncoder)
             f.write(json_data)
 
         self.write_log(u'GrideTrade保存文件{}完成'.format(grid_json_file))

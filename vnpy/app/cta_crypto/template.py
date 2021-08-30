@@ -1316,7 +1316,7 @@ class CtaFutureTemplate(CtaTemplate):
 
         up_grids_info = ""
         for grid in list(self.gt.up_grids):
-            if not grid.open_status and grid.order_status:
+            if grid.open_status and grid.order_status:
                 up_grids_info += f'平空中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}]\n'
                 if len(grid.order_ids) > 0:
                     up_grids_info += f'委托单号:{grid.order_ids}'
@@ -1333,7 +1333,7 @@ class CtaFutureTemplate(CtaTemplate):
 
         dn_grids_info = ""
         for grid in list(self.gt.dn_grids):
-            if not grid.open_status and grid.order_status:
+            if grid.open_status and grid.order_status:
                 dn_grids_info += f'平多中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}]\n'
                 if len(grid.order_ids) > 0:
                     dn_grids_info += f'委托单号:{grid.order_ids}'

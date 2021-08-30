@@ -4,15 +4,16 @@
 
 from vnpy.trader.constant import ChanSignals, Direction
 from vnpy.component.chanlun.pyChanlun import ChanBi, ChanDuan, ChanObject
-from vnpy.component.cta_line_bar import CtaLineBar
+# from vnpy.component.cta_line_bar import CtaLineBar
 from typing import List, Union
 
 # 所有底背驰信号集合
-DI_BEICHI_SIGNALS = [ChanSignals.LA0.value, ChanSignals.LA1.value, ChanSignals.LA2.value, ChanSignals.LA3.value,
-                     ChanSignals.LB0.value, ChanSignals.LB1.value, ChanSignals.LB2.value, ChanSignals.LB3.value]
+DI_BEICHI_SIGNALS = [ChanSignals.LA0.value,
+                     ChanSignals.LB0.value]
+
 # 所有顶背驰信号集合
-DING_BEICHI_SIGNALS = [ChanSignals.SA0.value, ChanSignals.SA1.value, ChanSignals.SA2.value, ChanSignals.SA3.value,
-                       ChanSignals.SB0.value, ChanSignals.SB1.value, ChanSignals.SB2.value, ChanSignals.SB3.value]
+DING_BEICHI_SIGNALS = [ChanSignals.SA0.value,
+                       ChanSignals.SB0.value]
 
 
 def duan_bi_is_end(duan: ChanDuan, direction: Direction) -> bool:
@@ -37,7 +38,7 @@ def duan_bi_is_end(duan: ChanDuan, direction: Direction) -> bool:
             return False
 
 
-def check_duan_not_rt(kline: CtaLineBar, direction: Direction) -> bool:
+def check_duan_not_rt(kline, direction: Direction) -> bool:
     """
     检查某一个K线当前线段是否非实时
     :param kline:
@@ -58,7 +59,7 @@ def check_duan_not_rt(kline: CtaLineBar, direction: Direction) -> bool:
     return True
 
 
-def check_bi_not_rt(kline: CtaLineBar, direction: Direction) -> bool:
+def check_bi_not_rt(kline, direction: Direction) -> bool:
     """
     检查某一个K线当前分笔是否非实时并符合判断方向
     :param kline:
@@ -83,9 +84,9 @@ def check_bi_not_rt(kline: CtaLineBar, direction: Direction) -> bool:
             if direction == 1:
                 # 判断还没走完的bar，是否满足顶分型
                 if float(kline.cur_fenxing.high) == float(kline.high_array[-1]) \
-                    and kline.cur_fenxing.index == kline.index_list[-1] \
-                    and kline.line_bar[-1].datetime.strftime('%Y-%m-%d %H:%M:%S') > kline.cur_fenxing.index\
-                    and kline.line_bar[-1].high_price < float(kline.cur_fenxing.high) \
+                        and kline.cur_fenxing.index == kline.index_list[-1] \
+                        and kline.line_bar[-1].datetime.strftime('%Y-%m-%d %H:%M:%S') > kline.cur_fenxing.index \
+                        and kline.line_bar[-1].high_price < float(kline.cur_fenxing.high) \
                         and kline.line_bar[-1].low_price < kline.line_bar[-2].low_price:
                     return True
 
@@ -103,7 +104,7 @@ def check_bi_not_rt(kline: CtaLineBar, direction: Direction) -> bool:
     return True
 
 
-def check_fx_power(kline: CtaLineBar, direction: Direction) -> str:
+def check_fx_power(kline, direction: Direction) -> str:
     """
     获取分型强弱
     :param kline: 本级别K线
@@ -165,7 +166,7 @@ def check_fx_power(kline: CtaLineBar, direction: Direction) -> str:
     return ret
 
 
-def check_chan_xt(kline: CtaLineBar, bi_list: List[ChanObject]) -> str:
+def check_chan_xt(kline, bi_list: List[ChanObject]) -> str:
     """
     获取缠论得形态
     如果提供得是段内得bi_list，一般可以算出该线段是否有背驰，
@@ -189,12 +190,12 @@ def check_chan_xt(kline: CtaLineBar, bi_list: List[ChanObject]) -> str:
     return v
 
 
-def check_chan_xt_three_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
+def check_chan_xt_three_bi(kline, bi_list: List[ChanObject]):
     """
     获取指定3分笔得形态
     （含有三笔）
-    :param kline:
-    :param bi_list:
+    :param kline: ctaLineBar对象
+    :param bi_list: 笔列表
     :return:
     """
     v = ChanSignals.Other.value
@@ -207,64 +208,148 @@ def check_chan_xt_three_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
     # 最后一笔是下跌
     if bi_3.direction == -1:
         # X3LA0~向下不重合
+        #            ^
+        #          /   \
+        #         /     \
+        #        /
+        # \     /
+        #  \   /
+        #    v
         if bi_3.low > bi_1.high:
             v = ChanSignals.X3LA0.value
 
-        # X3LB0~向下奔走型中枢
+        # X3LB0~向下奔走型
+        #              ^
+        #            /   \
+        #           /     \
+        #  \       /       \
+        #   \     /
+        #    \   /
+        #      v
         if bi_2.low < bi_3.low < bi_1.high < bi_2.high:
             v = ChanSignals.X3LB0.value
 
-        # X3LC0~向下三角收敛中枢
+        # X3LC0~向下收敛
+        # \
+        #  \            ^
+        #   \         /   \
+        #    \       /     \
+        #     \     /
+        #      \   /
+        #        v
         if bi_1.high > bi_3.high and bi_1.low < bi_3.low:
             v = ChanSignals.X3LC0.value
 
-        # 向下三角扩张中枢
+        # X3LD0~向下扩张
+        #              ^
+        #            /   \
+        #  \       /      \
+        #    \   /         \
+        #      v            \
+        #                    \
         if bi_1.high < bi_3.high and bi_1.low > bi_3.low:
             v = ChanSignals.X3LD0.value
 
-        # X3LE0~向下盘背中枢， X3LF0~向下无背中枢
+        # X3LE0~向下盘背， X3LF0~向下无背
         if bi_3.low < bi_1.low and bi_3.high < bi_1.high:
             if bi_3.height < bi_1.height:
-                # X3LE0~向下盘背中枢
+                # X3LE0~向下盘背
+                # \
+                #  \
+                #   \           ^
+                #    \       /   \
+                #     \   /       \
+                #       v          \
+                #                   \
                 v = ChanSignals.X3LE0.value
             else:
                 # X3LF0~向下无背中枢
+                # \
+                #  \          ^
+                #   \      /    \
+                #    \   /       \
+                #      v          \
+                #                  \
+                #                   \
                 v = ChanSignals.X3LF0.value
 
     # 上涨线段
     elif bi_3.direction == 1:
         # X3SA0~向上不重合
-        if bi_3.high > bi_1.low:
+        #    ^
+        #  /  \
+        # /    \
+        #       \
+        #        \     /
+        #         \   /
+        #           v
+        if bi_3.high < bi_1.low:
             v = ChanSignals.X3SA0.value
 
-        # X3SB0~向上奔走型中枢
+        # X3SB0~向上奔走型
+        #     ^
+        #   /  \
+        #  /    \       /
+        # /      \     /
+        #         \   /
+        #           v
         if bi_2.low < bi_1.low < bi_3.high < bi_2.high:
             v = ChanSignals.X3SB0.value
 
-        # X3SC0~向上三角收敛中枢
+        # X3SC0~向上收敛
+        #        ^
+        #      /  \
+        #     /    \      /
+        #    /      \   /
+        #   /         v
+        # /
         if bi_1.high > bi_3.high and bi_1.low < bi_3.low:
             v = ChanSignals.X3SC0.value
 
-        # X3SD0~向上三角扩张中枢
+        # X3SD0~向上扩张
+        #                       /
+        #        ^            /
+        #      /  \         /
+        #     /    \      /
+        #    /      \   /
+        #             v
         if bi_1.high < bi_3.high and bi_1.low > bi_3.low:
             v = ChanSignals.X3SD0.value
-        # X3SE0~向上盘背中枢，X3SF0~向上无背中枢
+
+        # X3SE0~向上盘背，X3SF0~向上无背
         if bi_3.low > bi_1.low and bi_3.high > bi_1.high:
             if bi_3.height < bi_1.height:
-                # X3SE0~向上盘背中枢
+                # X3SE0~向上盘背
+                #                   /
+                #        ^         /
+                #      /  \       /
+                #     /    \     /
+                #    /      \   /
+                #   /         v
+                #  /
+                # /
                 v = ChanSignals.X3SE0.value
             else:
-                # X3SF0~向上无背中枢
+                # X3SF0~向上无背
+                #                    /
+                #                   /
+                #        ^         /
+                #      /  \       /
+                #     /    \     /
+                #    /      \   /
+                #   /         v
+                #  /
                 v = ChanSignals.X3SF0.value
 
     return v
 
 
-def check_chan_xt_five_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
+def check_chan_xt_five_bi(kline, bi_list: List[ChanObject]):
     """识别当前5笔形态
-        :param cur_duan: 当前线段
-        :return: str
-        """
+    :param kline: ctaLineBar对象
+    :param bi_list: 笔列表
+    :return: str
+    """
     v = ChanSignals.Other.value
 
     if len(bi_list) != 5:
@@ -282,77 +367,77 @@ def check_chan_xt_five_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
         # aAb式底背驰
         if min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) and max_high == bi_1.high and bi_5.height < bi_1.height:
             if (min_low == bi_3.low and bi_5.low < bi_1.low) or (min_low == bi_5.low):
-                v = ChanSignals.LA0.value
+                return ChanSignals.LA0.value  # "底背驰”五笔aAb式
 
         # 类趋势底背驰( 笔5 的强度比笔1、笔3低）
         if max_high == bi_1.high and min_low == bi_5.low and bi_4.high < bi_2.low \
                 and bi_5.height < max(bi_3.height, bi_1.height) \
                 and bi_5.atan < max(bi_3.atan, bi_1.atan):
-            v = ChanSignals.LA0.value
+            return ChanSignals.LA0.value  # "底背驰" 五笔类趋势
 
         # 上颈线突破
         if (min_low == bi_1.low and bi_5.high > min(bi_1.high, bi_2.high) > bi_5.low > bi_1.low) \
                 or (min_low == bi_3.low and bi_5.high > bi_3.high > bi_5.low > bi_3.low):
-            v = ChanSignals.LG0.value
+            return ChanSignals.LG0.value  # 上颈线突破  五笔
 
         # 五笔三买，要求bi_5.high是最高点, 或者bi_4.height，超过笔2、笔3两倍
-        if max(bi_1.low, bi_3.low) < min(bi_1.high, bi_3.high) < bi_5.low:
+        if min_low < max(bi_1.low, bi_3.low) < min(bi_1.high, bi_3.high) < bi_5.low:
             if bi_5.high == max_high:
-                v = ChanSignals.LI0.value
-            elif bi_4.low == min_low and bi_1.high == max_high \
+                v = ChanSignals.LI0.value  # 类三买， 五笔
+            elif bi_3.low == min_low and bi_1.high == max_high \
                     and bi_4.height > max(bi_1.height, bi_2.height, bi_3.height) \
                     and bi_4.height > 2 * max(bi_2.height, bi_3.height):
-                v = ChanSignals.LI0.value
+                v = ChanSignals.LI0.value  # 类三买， 五笔
 
-        # 向上三角扩张中枢
-        if bi_1.high < bi_3.high < bi_5.high and bi_1.low > bi_3.low > bi_5.low:
-            v = ChanSignals.LJ0.value
-
-        # 向上三角收敛中枢
-        if bi_1.high > bi_3.high > bi_5.high and bi_1.low < bi_3.low < bi_5.low:
-            v = ChanSignals.LK0.value
+        # # 向上三角扩张中枢
+        # if bi_1.high < bi_3.high < bi_5.high and bi_1.low > bi_3.low > bi_5.low:
+        #     v = ChanSignals.LJ0.value
+        #
+        # # 向上三角收敛中枢
+        # if bi_1.high > bi_3.high > bi_5.high and bi_1.low < bi_3.low < bi_5.low:
+        #     v = ChanSignals.LK0.value
 
     # 上涨线段，寻找顶背驰
     elif direction == 1:
-        # aAb式顶背驰
+        # aAb式顶背驰，类一卖
         if min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) and min_low == bi_1.low and bi_5.height < bi_1.height:
             if (max_high == bi_3.high and bi_5.high > bi_1.high) or (max_high == bi_5.high):
-                v = ChanSignals.SA0.value
+                return ChanSignals.SA0.value  # k3='基础形态', v1='顶背驰', v2='五笔aAb式'
 
-        # 类趋势顶背驰
+        # 类趋势顶背驰，类一卖
         if min_low == bi_1.low and max_high == bi_5.high \
                 and bi_5.height < max(bi_1.height, bi_3.height) \
                 and bi_5.atan < max(bi_1.atan, bi_3.atan) \
                 and bi_4.low > bi_2.high:
-            v = ChanSignals.SA0.value
+            return ChanSignals.SA0.value  # k3='基础形态', v1='顶背驰', v2='五笔类趋势')
 
         # 下颈线突破
         if (max_high == bi_1.high and bi_5.low < max(bi_1.low, bi_2.low) < bi_5.high < max_high) \
                 or (max_high == bi_3.high and bi_5.low < bi_3.low < bi_5.high < max_high):
-            v = ChanSignals.SG0.value
+            return ChanSignals.SG0.value  # k3='基础形态', v1='下颈线突破', v2='五笔')
 
         # 五笔三卖，要求bi_5.low是最低点，中枢可能是1~3
         if min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low) > bi_5.high:
             if bi_5.low == min_low:
-                v = ChanSignals.SI0.value
-            elif bi_4.high == max_high and bi_1.low == min_low \
-                    and bi_4.height > max(bi_1.height, bi_2.height, bi_3.height)\
-                    and bi_4.height > 2 * max(bi_2.height,bi_3.height):
-                v = ChanSignals.SI0.value
+                return ChanSignals.SI0.value
+            elif bi_3.high == max_high and bi_1.low == min_low \
+                    and bi_4.height > max(bi_1.height, bi_2.height, bi_3.height) \
+                    and bi_4.height > 2 * max(bi_2.height, bi_3.height):
+                return ChanSignals.SI0.value  # k3='基础形态', v1='类三卖', v2='五笔')
             # elif bi_1.high == max_high and bi_1.low == min_low:
 
-        # 向下三角扩张中枢
-        if bi_1.high < bi_3.high < bi_5.high and bi_1.low > bi_3.low > bi_5.low:
-            v = ChanSignals.SJ0.value
-
-        # 向下三角收敛中枢
-        if bi_1.high > bi_3.high > bi_5.high and bi_1.low < bi_3.low < bi_5.low:
-            v = ChanSignals.SK0.value
+        # # 向下三角扩张中枢
+        # if bi_1.high < bi_3.high < bi_5.high and bi_1.low > bi_3.low > bi_5.low:
+        #     v = ChanSignals.SJ0.value
+        #
+        # # 向下三角收敛中枢
+        # if bi_1.high > bi_3.high > bi_5.high and bi_1.low < bi_3.low < bi_5.low:
+        #     v = ChanSignals.SK0.value
 
     return v
 
 
-def check_chan_xt_seven_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
+def check_chan_xt_seven_bi(kline, bi_list: List[ChanObject]):
     """
     识别当前7笔的形态
     :param cur_duan:
@@ -371,80 +456,80 @@ def check_chan_xt_seven_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
             # aAbcd式底背驰, d.高度斜率 小于 b.高度斜率
             if min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) > bi_6.high \
                     and bi_7.height < bi_5.height and bi_7.atan <= bi_5.atan:
-                v = ChanSignals.LA0.value
+                v = ChanSignals.LA0.value  # k3='基础形态', v1='底背驰', v2='七笔aAbcd式')
 
             # abcAd式底背驰
             if bi_2.low > min(bi_4.high, bi_6.high) > max(bi_4.low, bi_6.low) \
                     and bi_7.height < (bi_1.high - bi_3.low) \
                     and bi_7.atan < (bi_1.atan + bi_3.atan) / 2:
-                v = ChanSignals.LA0.value
+                v = ChanSignals.LA0.value  # k3='基础形态', v1='底背驰', v2='七笔abcAd式')
 
             # aAb式底背驰
             if min(bi_2.high, bi_4.high, bi_6.high) > max(bi_2.low, bi_4.low, bi_6.low) \
                     and bi_7.height < bi_1.height and bi_7.atan <= bi_1.atan:
-                v = ChanSignals.LA0.value
+                v = ChanSignals.LA0.value  # k3='基础形态', v1='底背驰', v2='七笔aAb式'
 
             # 类趋势底背驰
             if bi_2.low > bi_4.high and bi_4.low > bi_6.high \
-                    and bi_7.height < max(bi_5.height, bi_3.height, bi_1.height)\
+                    and bi_7.height < max(bi_5.height, bi_3.height, bi_1.height) \
                     and bi_7.atan < max(bi_5.atan, bi_3.atan, bi_1.atan):
-                v = ChanSignals.LA0.value
+                v = ChanSignals.LA0.value  # k3='基础形态', v1='底背驰', v2='七笔类趋势'
 
         # 向上中枢完成
         if bi_4.low == min_low and min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low) \
                 and min(bi_5.high, bi_7.high) > max(bi_5.low, bi_7.low) \
                 and max(bi_4.high, bi_6.high) > min(bi_3.high, bi_4.high):
             if max(bi_1.low, bi_3.low) < max(bi_5.high, bi_7.high):
-                v = ChanSignals.LH0.value
+                v = ChanSignals.LH0.value  # k3='基础形态', v1='向上中枢完成', v2='七笔')
 
-        # 七笔三买，567回调
+        # 七笔三买，567回调 ：1~3构成中枢，最低点在1~3，最高点在5~7，5~7的最低点大于1~3的最高点
         if bi_5.high == max_high and bi_5.high > bi_7.high \
                 and bi_5.low > bi_7.low > min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low):
-            v = ChanSignals.LI0.value
-        #
+            v = ChanSignals.LI0.value  # k3='基础形态', v1='类三买', v2='七笔'
+
     elif bi_7.direction == 1:
         # 顶背驰
         if bi_1.low == min_low and bi_7.high == max_high:
             # aAbcd式顶背驰
             if bi_6.low > min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) \
                     and bi_7.height < bi_5.height and bi_7.atan <= bi_5.atan:
-                v = ChanSignals.SA0.value
+                v = ChanSignals.SA0.value  # k3='基础形态', v1='顶背驰', v2='七笔aAbcd式'
 
             # abcAd式顶背驰
             if min(bi_4.high, bi_6.high) > max(bi_4.low, bi_6.low) > bi_2.high \
                     and bi_7.height < (bi_3.high - bi_1.low) \
                     and bi_7.atan < (bi_1.atan + bi_3.atan) / 2:
-                v = ChanSignals.SA0.value
+                v = ChanSignals.SA0.value  # k3='基础形态', v1='顶背驰', v2='七笔abcAd式'
 
             # aAb式顶背驰
             if min(bi_2.high, bi_4.high, bi_6.high) > max(bi_2.low, bi_4.low, bi_6.low) \
                     and bi_7.height < bi_1.height and bi_7.atan <= bi_1.atan:
-                v = ChanSignals.SA0.value
+                v = ChanSignals.SA0.value  # k3='基础形态', v1='顶背驰', v2='七笔aAb式'
 
             # 类趋势顶背驰
             if bi_2.high < bi_4.low and bi_4.high < bi_6.low \
-                    and bi_7.height < max(bi_5.height, bi_3.height, bi_1.height)\
+                    and bi_7.height < max(bi_5.height, bi_3.height, bi_1.height) \
                     and bi_7.atan < max(bi_5.atan, bi_3.atan, bi_1.atan):
-                v = ChanSignals.SA0.value
+                v = ChanSignals.SA0.value  # k3='基础形态', v1='顶背驰', v2='七笔类趋势'
 
         # 向下中枢完成
         if bi_4.high == max_high and min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low) \
                 and min(bi_5.high, bi_7.high) > max(bi_5.low, bi_7.low) \
                 and min(bi_4.low, bi_6.low) < max(bi_3.low, bi_4.low):
             if min(bi_1.high, bi_3.high) > min(bi_5.low, bi_7.low):
-                v = ChanSignals.SH0.value
+                v = ChanSignals.SH0.value  # k3='基础形态', v1='向下中枢完成', v2='七笔'
 
-        # 七笔三卖，567回调，中枢可能在1~3
+        # 七笔三卖，567回调 1~3构成中枢，最高点在1~3，最低点在5~7，5~7的最高点小于1~3的最低点
         if bi_5.low == min_low and bi_5.low < bi_7.low \
                 and min(bi_1.high, bi_3.high) > max(bi_1.low, bi_3.low) > bi_7.high > bi_5.high:
-            v = ChanSignals.SI0.value
+            v = ChanSignals.SI0.value  # k3='基础形态', v1='类三卖', v2='七笔'
 
     return v
 
 
-def check_chan_xt_nine_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
+def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
     """
-    获取线段得形态（9分笔）
+    获取线段得买卖点（9分笔）
     :param cur_duan:
     :return:
     """
@@ -460,72 +545,126 @@ def check_chan_xt_nine_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
     # 依据最后一笔得方向进行判断
     if direction == -1:
         if min_low == bi_9.low and max_high == bi_1.high:
-            # aAbBc式底背驰
-            if min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) > bi_6.high \
-                    and min(bi_6.high, bi_8.high) > max(bi_6.low, bi_8.low) \
-                    and min(bi_2.low, bi_4.low) > max(bi_6.high, bi_8.high) \
-                    and bi_9.height < bi_5.height and bi_7.atan <= bi_5.atan:
-                v = ChanSignals.LA0.value
-
-            # aAb式底背驰
+            # aAb式类一买
             if min(bi_2.high, bi_4.high, bi_6.high, bi_8.high) > max(bi_2.low, bi_4.low, bi_6.low, bi_8.low) \
                     and bi_9.height < bi_1.height and bi_9.atan <= bi_1.atan \
                     and bi_3.low >= bi_1.low and bi_7.high <= bi_9.high:
-                v = ChanSignals.LA0.value
+                return ChanSignals.Q1L0.value  # k3='类买卖点', v1='类一买', v2='九笔aAb式'
 
-            # aAbcd式底背驰
+            # aAbcd式类一买
             if min(bi_2.high, bi_4.high, bi_6.high) > max(bi_2.low, bi_4.low, bi_6.low) > bi_8.high \
                     and bi_9.height < bi_7.height and bi_9.atan <= bi_7.atan:
-                v = ChanSignals.LA0.value
+                return ChanSignals.Q1L0.value  # k3='类买卖点', v1='类一买', v2='九笔aAbcd式'
 
-            # ABC式底背驰
+            # ABC式类一买
             if bi_3.low < bi_1.low and bi_7.high > bi_9.high \
                     and min(bi_4.high, bi_6.high) > max(bi_4.low, bi_6.low) \
                     and (bi_1.high - bi_3.low) > (bi_7.high - bi_9.low):
-                v = ChanSignals.LA0.value
+                return ChanSignals.Q1L0.value  # k3='类买卖点', v1='类一买', v2='九笔ABC式'
 
-        # 九笔三买(789回调）中枢可能在3~7内
-        if min_low == bi_1.low and max_high == bi_9.high \
-                and bi_9.low > min([x.high for x in [bi_3, bi_5, bi_7]]) > max([x.low for x in [bi_3, bi_5, bi_7]]):
-            v = ChanSignals.LI0.value
+            # 类趋势一买
+            if bi_8.high < bi_6.low < bi_6.high < bi_4.high < bi_2.low \
+                    and bi_9.atan < max([bi_1.atan, bi_3.atan, bi_5.atan, bi_7.atan]):
+                return ChanSignals.Q1L0.value  # k3='类买卖点', v1='类一买', v2='九笔类趋势'
+
+        # 9笔 aAbBc式类一买（2~4构成中枢A，6~8构成中枢B，9背驰）
+        if max_high == max(bi_1.high, bi_3.high) and min_low == bi_9.low \
+                and min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) > bi_6.high \
+                and min(bi_6.high, bi_8.high) > max(bi_6.low, bi_8.low) \
+                and min(bi_2.low, bi_4.low) > max(bi_6.high, bi_8.high) \
+                and bi_9.height < bi_5.height and bi_9.atan <= bi_5.atan:
+            return ChanSignals.Q1L0.value  # k3='类买卖点', v1='类一买', v2='九笔aAb式')
+
+        # 九笔GG 类三买（1357构成中枢，最低点在3或5）
+        if max_high == bi_9.high > bi_9.low \
+                > max([x.high for x in [bi_1, bi_3, bi_5, bi_7]]) \
+                > min([x.high for x in [bi_1, bi_3, bi_5, bi_7]]) \
+                > max([x.low for x in [bi_1, bi_3, bi_5, bi_7]]) \
+                > min([x.low for x in [bi_3, bi_5]]) == min_low:
+            return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔GG三买')
+
+        # 类三买（357构成中枢，8的力度小于2，9回调不跌破GG构成三买）
+        if bi_8.height < bi_2.height and max_high == bi_9.high > bi_9.low \
+                > max([x.high for x in [bi_3, bi_5, bi_7]]) \
+                > min([x.high for x in [bi_3, bi_5, bi_7]]) \
+                > max([x.low for x in [bi_3, bi_5, bi_7]]) > bi_1.low == min_low:
+            return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔GG三买')
+
+        # # 九笔三买(789回调）中枢可能在3~7内
+        # if min_low == bi_1.low and max_high == bi_9.high \
+        #         and bi_9.low > min([x.high for x in [bi_3, bi_5, bi_7]]) > max([x.low for x in [bi_3, bi_5, bi_7]]):
+        #     v = ChanSignals.Q3L0.value
+
+        if min_low == bi_5.low and max_high == bi_1.high and bi_4.high < bi_2.low:  # 前五笔构成向下类趋势
+            zd = max([x.low for x in [bi_5, bi_7]])
+            zg = min([x.high for x in [bi_5, bi_7]])
+            gg = max([x.high for x in [bi_5, bi_7]])
+            if zg > zd and bi_8.high > gg:  # 567构成中枢，且8的高点大于gg
+                if bi_9.low > zg:
+                    return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔ZG三买')
+
+                # 类二买
+                if bi_9.high > gg > zg > bi_9.low > zd:
+                    return ChanSignals.Q2L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二买', v2='九笔')
 
     elif direction == 1:
-        if max_high == bi_9.high and min_low == bi_1.low:
-            # aAbBc式顶背驰
-            if bi_6.low > min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) \
-                    and min(bi_6.high, bi_8.high) > max(bi_6.low, bi_8.low) \
-                    and max(bi_2.high, bi_4.high) < min(bi_6.low, bi_8.low) \
-                    and bi_9.height < bi_5.height and bi_9.atan <= bi_5.atan:
-                v = ChanSignals.SA0.value
 
-            # aAb式顶背驰
+        # 倒9笔是最高点，倒一笔是最低点
+        if max_high == bi_9.high and min_low == bi_1.low:
+
+            # aAb式类一卖
             if min(bi_2.high, bi_4.high, bi_6.high, bi_8.high) > max(bi_2.low, bi_4.low, bi_6.low, bi_8.low) \
                     and bi_9.height < bi_1.height and bi_9.atan <= bi_1.atan \
                     and bi_3.high <= bi_1.high and bi_7.low >= bi_9.low:
-                v = ChanSignals.SA0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2='九笔aAb式')
 
-            # aAbcd式顶背驰
+            # aAbcd式类一卖
             if bi_8.low > min(bi_2.high, bi_4.high, bi_6.high) > max(bi_2.low, bi_4.low, bi_6.low) \
                     and bi_9.height < bi_7.height and bi_9.atan <= bi_7.atan:
-                v = ChanSignals.SA0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2='九笔aAbcd式')
 
-            # ABC式顶背驰
+            # ABC式类一卖
             if bi_3.high > bi_1.high and bi_7.low < bi_9.low \
                     and min(bi_4.high, bi_6.high) > max(bi_4.low, bi_6.low) \
                     and (bi_3.high - bi_1.low) > (bi_9.high - bi_7.low):
-                v = ChanSignals.SA0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2='九笔ABC式')
 
-        # 九笔三卖
+            # 类趋势类一卖
+            if bi_8.low > bi_6.high > bi_6.low > bi_4.high > bi_4.low > bi_2.high \
+                    and bi_9.atan < max([bi_1.atan, bi_3.atan, bi_5.atan, bi_7.atan]):
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2='九笔类趋势')
+
+        # aAbBc式类一卖
+        if max_high == bi_9.high and min_low == min(bi_1.low, bi_3.low) \
+                and bi_6.low > min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) \
+                and min(bi_6.high, bi_8.high) > max(bi_6.low, bi_8.low) \
+                and max(bi_2.high, bi_4.high) < min(bi_6.low, bi_8.low) \
+                and bi_9.height < bi_5.height and bi_9.atan <= bi_5.atan:
+            return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2='九笔aAbBc式')
+
+        # 九笔类三卖
         if max_high == bi_1.high and min_low == bi_9.low \
                 and bi_9.high < max([x.low for x in [bi_3, bi_5, bi_7]]) < min([x.high for x in [bi_3, bi_5, bi_7]]):
-            v = ChanSignals.SI0.value
+            return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔')
+
+        if min_low == bi_1.low and max_high == bi_5.high and bi_2.high < bi_4.low:  # 前五笔构成向上类趋势
+            zd = max([x.low for x in [bi_5, bi_7]])
+            zg = min([x.high for x in [bi_5, bi_7]])
+            dd = min([x.low for x in [bi_5, bi_7]])
+            if zg > zd and bi_8.low < dd:  # 567构成中枢，且8的低点小于dd
+                if bi_9.high < zd:
+                    return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔ZD三卖')
+
+                # 类二卖
+                if dd < zd <= bi_9.high < zg:
+                    return ChanSignals.Q2S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二卖', v2='九笔')
 
     return v
 
 
-def check_chan_xt_eleven_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
+def check_chan_xt_eleven_bi(kline, bi_list: List[ChanObject]):
     """
-    获取线段得背驰形态（含11个分笔）
+    获取线段得的类买卖点（含11个分笔）
     :param cur_duan:
     :return:
     """
@@ -538,95 +677,126 @@ def check_chan_xt_eleven_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
     max_high = max([x.high for x in bi_list])
     min_low = min([x.low for x in bi_list])
 
+    # 11笔向下，寻找买点
     if direction == -1:
+        # 1笔最高，11笔最低
         if min_low == bi_11.low and max_high == bi_1.high:
-            # aAbBc式底背驰，bi_2-bi_6构成A
-            if min(bi_2.high, bi_4.high, bi_6.high) > max(bi_2.low, bi_4.low, bi_6.low) > bi_8.high \
-                    and min(bi_8.high, bi_10.high) > max(bi_8.low, bi_10.low) \
-                    and min(bi_2.low, bi_4.low, bi_6.low) > max(bi_8.high, bi_10.high) \
-                    and bi_11.height < bi_7.height and bi_11.atan <= bi_7.atan:
-                v = ChanSignals.LA0.value
 
-            # aAbBc式底背驰，bi_6-bi_10构成B
-            if min(bi_2.high, bi_4.high) > max(bi_2.low, bi_4.low) > bi_6.high \
-                    and min(bi_6.high, bi_8.high, bi_10.high) > max(bi_6.low, bi_8.low, bi_10.low) \
-                    and min(bi_2.low, bi_4.low) > max(bi_6.high, bi_8.high, bi_10.high) \
-                    and bi_11.height < bi_5.height and bi_11.atan <= bi_5.atan:
-                v = ChanSignals.LA0.value
-
-            # ABC式底背驰，A5B3C3
+            # ABC式类一买，A5B3C3
             if bi_5.low == min([x.low for x in [bi_1, bi_3, bi_5]]) \
                     and bi_9.low > bi_11.low and bi_9.high > bi_11.high \
                     and bi_8.high > bi_6.low and bi_1.high - bi_5.low > bi_9.high - bi_11.low:
-                v = ChanSignals.LA0.value
-                # C内部背驰
-                if bi_11.height < bi_9.height:
-                    v = ChanSignals.LB0.value
+                return ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="11笔A5B3C3式")
 
-            # ABC式底背驰，A3B3C5
+            # ABC式类一买，A3B3C5
             if bi_1.high > bi_3.high and bi_1.low > bi_3.low \
                     and bi_7.high == max([x.high for x in [bi_7, bi_9, bi_11]]) \
                     and bi_6.high > bi_4.low and bi_1.high - bi_3.low > bi_7.high - bi_11.low:
-                v = ChanSignals.LA0.value
-                # C内部背驰
-                if bi_11.height < max(bi_9.height, bi_7.height) and bi_11.atan <= max(bi_9.atan, bi_7.atan):
-                    v = ChanSignals.LB0.value
+                return ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="11笔A3B3C5式")
 
-            # ABC式底背驰，A3B5C3
+            # ABC式类一买，A3B5C3
             if bi_1.low > bi_3.low and min(bi_4.high, bi_6.high, bi_8.high) > max(bi_4.low, bi_6.low, bi_8.low) \
                     and bi_9.high > bi_11.high and bi_1.high - bi_3.low > bi_9.high - bi_11.low:
-                v = ChanSignals.LA0.value
-                # C内部背驰
-                if bi_11.height < max(bi_9.height, bi_7.height) and bi_11.atan <= max(bi_9.atan, bi_7.atan):
-                    v = ChanSignals.LB0.value
+                v = ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="11笔A3B5C3式")
 
+            # a1Ab式类一买，a1（1~7构成的类趋势）
+            if bi_2.low > bi_4.high > bi_4.low > bi_6.high > bi_5.low > bi_7.low and bi_10.high > bi_8.low:
+                return ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="11笔a1Ab式")
+
+        # 类二买：1~9构成类趋势，11不创新低,斜率低于9
+        if min_low == bi_9.low < bi_8.high < bi_6.low < bi_6.high < bi_4.low < bi_4.high < bi_2.low < bi_1.high == max_high \
+                and bi_11.low > bi_9.low and bi_9.atan > bi_11.atan:
+            return ChanSignals.Q2L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二买', v2="11笔")
+
+        # 类二买（1~7构成盘整背驰，246构成下跌中枢，9/11构成上涨中枢，且上涨中枢ZG大于下跌中枢ZG）
+        if bi_7.atan < bi_1.atan and min_low == bi_7.low < max([x.low for x in [bi_2, bi_4, bi_6]]) \
+                < min([x.high for x in [bi_2, bi_4, bi_6]]) < max(
+            [x.high for x in [bi_9, bi_11]]) < bi_1.high == max_high \
+                and bi_11.low > min([x.low for x in [bi_2, bi_4, bi_6]]) \
+                and min([x.high for x in [bi_9, bi_11]]) > max([x.low for x in [bi_9, bi_11]]):
+            return ChanSignals.Q2L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二买', v2="11笔")
+
+        # 类二买（1~7为区间极值，9~11构成上涨中枢，上涨中枢GG大于4~6的最大值，上涨中枢DD大于4~6的最小值）
+        if max_high == bi_1.high and min_low == bi_7.low \
+                and min(bi_9.high, bi_11.high) > max(bi_9.low, bi_11.low) \
+                and max(bi_11.high, bi_9.high) > max(bi_4.high, bi_6.high) \
+                and min(bi_9.low, bi_11.low) > min(bi_4.low, bi_6.low):
+            return ChanSignals.Q2L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二买', v2="11笔")
+
+        # 类三买（1~9构成大级别中枢，10离开，11回调不跌破GG）
+        gg = max([x.high for x in [bi_1, bi_2, bi_3]])
+        zg = min([x.high for x in [bi_1, bi_2, bi_3]])
+        zd = max([x.low for x in [bi_1, bi_2, bi_3]])
+        dd = min([x.low for x in [bi_1, bi_2, bi_3]])
+        if max_high == bi_11.high and bi_11.low > zg > zd \
+                and gg > bi_5.low and gg > bi_7.low and gg > bi_9.low \
+                and dd < bi_5.high and dd < bi_7.high and dd < bi_9.high:
+            return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2="11笔GG三买")
+
+    # 11笔向上，寻找卖点
     elif direction == 1:
+        # 1笔最低，11笔最高
         if max_high == bi_11.high and min_low == bi_1.low:
-            # aAbBC式顶背驰，bi_2-bi_6构成A
-            if bi_8.low > min(bi_2.high, bi_4.high, bi_6.high) >= max(bi_2.low, bi_4.low, bi_6.low) \
-                    and min(bi_8.high, bi_10.high) >= max(bi_8.low, bi_10.low) \
-                    and max(bi_2.high, bi_4.high, bi_6.high) < min(bi_8.low, bi_10.low) \
-                    and bi_11.height < bi_7.height and bi_11.atan <= bi_7.atan:
-                v = ChanSignals.SA0.value
-
-            # aAbBC式顶背驰，bi_6-bi_10构成B
-            if bi_6.low > min(bi_2.high, bi_4.high) >= max(bi_2.low, bi_4.low) \
-                    and min(bi_6.high, bi_8.high, bi_10.high) >= max(bi_6.low, bi_8.low, bi_10.low) \
-                    and max(bi_2.high, bi_4.high) < min(bi_6.low, bi_8.low, bi_10.low) \
-                    and bi_11.height < bi_7.height and bi_11.atan <= bi_7.atan:
-                v = ChanSignals.SA0.value
 
             # ABC式顶背驰，A5B3C3
             if bi_5.high == max([bi_1.high, bi_3.high, bi_5.high]) and bi_9.low < bi_11.low and bi_9.high < bi_11.high \
                     and bi_8.low < bi_6.high and bi_11.high - bi_9.low < bi_5.high - bi_1.low:
-                v = ChanSignals.SA0.value
-                # C内部背驰
-                if bi_11.height < bi_9.height and bi_11.atan <= bi_9.atan:
-                    v = ChanSignals.SB0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2="11笔A5B3C3式")
 
             # ABC式顶背驰，A3B3C5
             if bi_7.low == min([bi_11.low, bi_9.low, bi_7.low]) and bi_1.high < bi_3.high and bi_1.low < bi_3.low \
                     and bi_6.low < bi_4.high and bi_11.high - bi_7.low < bi_3.high - bi_1.low:
-                v = ChanSignals.SA0.value
-                # C内部背驰
-                if bi_11.height < max(bi_9.height, bi_7.height) and bi_11.atan <= max(bi_9.atan, bi_7.atan):
-                    v = ChanSignals.SB0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2="11笔A3B3C5式")
 
             # ABC式顶背驰，A3B5C3
             if bi_1.high < bi_3.high and min(bi_4.high, bi_6.high, bi_8.high) > max(bi_4.low, bi_6.low, bi_8.low) \
                     and bi_9.low < bi_11.low and bi_3.high - bi_1.low > bi_11.high - bi_9.low:
-                v = ChanSignals.SA0.value
-                # C内部背驰
-                if bi_11.height < max(bi_9.height, bi_7.height) and bi_11.atan <= max(bi_9.atan, bi_7.atan):
-                    v = ChanSignals.SB0.value
+                return ChanSignals.Q1S0.value
+
+            # a1Ab式类一卖，a1（1~7构成的类趋势）
+            if bi_2.high < bi_4.low < bi_4.high < bi_6.low < bi_5.high < bi_7.high and bi_10.low < bi_8.high:
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2="11笔a1Ab式")
+
+        # 类二卖：1~9构成类趋势，11不创新高
+        if max_high == bi_9.high > bi_8.low > bi_6.high > bi_6.low > bi_4.high > bi_4.low > bi_2.high > bi_1.low == min_low \
+                and bi_11.high < bi_9.high and bi_9.atan > bi_11.atan:
+            return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二卖', v2="11笔")
+
+        # 类二卖（1~7构成盘整背驰，246构成上涨中枢，9/11构成下跌中枢，且下跌中枢DD小于上涨中枢ZD）
+        if bi_7.atan < bi_1.atan and max_high == bi_7.high \
+                > min([x.high for x in [bi_2, bi_4, bi_6]]) \
+                > max([x.low for x in [bi_2, bi_4, bi_6]]) \
+                > min([x.low for x in [bi_9, bi_11]]) \
+                > bi_1.low == min_low \
+                and bi_11.high < max([x.high for x in [bi_2, bi_4, bi_6]]) \
+                and max([x.low for x in [bi_9, bi_11]]) < min([x.high for x in [bi_9, bi_11]]):
+            return ChanSignals.Q2S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二卖', v2="11笔")
+
+        # 类二卖（1~7为区间极值，9~11构成下跌中枢，下跌中枢DD小于4~6的最小值，下跌中枢GG小于4~6的最大值）
+        if min_low == bi_1.low and max_high == bi_7.high \
+                and max(bi_9.low, bi_11.low) < min(bi_9.high, bi_11.high) \
+                and min(bi_11.low, bi_9.low) < min(bi_4.low, bi_6.low) \
+                and max(bi_9.high, bi_11.high) < max(bi_4.high, bi_6.high):
+            return ChanSignals.Q2S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二卖', v2="11笔")
+
+        # 类三卖（1~9构成大级别中枢，10离开，11回调不涨破DD）
+        gg = min([x.low for x in [bi_1, bi_2, bi_3]])
+        zg = max([x.low for x in [bi_1, bi_2, bi_3]])
+        zd = min([x.high for x in [bi_1, bi_2, bi_3]])
+        dd = max([x.high for x in [bi_1, bi_2, bi_3]])
+        if min_low == bi_11.low and bi_11.high < zd < zg \
+                and dd < bi_5.high and dd < bi_7.high and dd < bi_9.high \
+                and gg > bi_5.low and gg > bi_7.low and gg > bi_9.low:
+            return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2="11笔GG三买")
 
     return v
 
 
-def check_chan_xt_thirteen_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
+def check_chan_xt_thirteen_bi(kline, bi_list: List[ChanObject]):
     """
-    获取线段得背驰形态（含13个分笔）
-    :param cur_duan:
+    获取线段得形态（含13个分笔）
+    :param kline:
+    :param bi_list: 由远及近的十三笔
     :return:
     """
     v = ChanSignals.Other.value
@@ -641,78 +811,48 @@ def check_chan_xt_thirteen_bi(kline: CtaLineBar, bi_list: List[ChanObject]):
     # 下跌线段时，判断背驰类型
     if direction == -1:
         if min_low == bi_13.low and max_high == bi_1.high:
-            # aAbBc式底背驰，bi_2-bi_6构成A，bi_8-bi_12构成B
-            if min(bi_2.high, bi_4.high, bi_6.high) > max(bi_2.low, bi_4.low, bi_6.low) > bi_8.high \
-                    and min(bi_8.high, bi_10.high, bi_12.high) > max(bi_8.low, bi_10.low, bi_12.low) \
-                    and min(bi_2.low, bi_4.low, bi_6.low) > max(bi_8.high, bi_10.high, bi_12.high) \
-                    and bi_13.height < bi_7.height and bi_13.atan <= bi_7.atan:
-                v = ChanSignals.LA0.value
-
-            # ABC式底背驰，A5B3C5
+            # ABC式类一买，A5B3C5
             if bi_5.low < min(bi_1.low, bi_3.low) and bi_9.high > max(bi_11.high, bi_13.high) \
                     and bi_8.high > bi_6.low and bi_1.high - bi_5.low > bi_9.high - bi_13.low:
-                v = ChanSignals.LA0.value
+                return ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="13笔A5B3C5式")
 
-                if bi_13.height < max(bi_11.height, bi_9.height) and bi_13.atan <= max(bi_11.atan, bi_9.atan):
-                    v = ChanSignals.LB0.value
-
-            # ABC式底背驰，A3B5C5
+            # ABC式类一买，A3B5C5
             if bi_3.low < min(bi_1.low, bi_5.low) and bi_9.high > max(bi_11.high, bi_13.high) \
                     and min(bi_4.high, bi_6.high, bi_8.high) > max(bi_4.low, bi_6.low, bi_8.low) \
                     and bi_1.high - bi_3.low > bi_9.high - bi_13.low:
-                v = ChanSignals.LA0.value
-
-                if bi_13.height < max(bi_11.height, bi_9.height) and bi_13.atan <= max(bi_11.atan, bi_9.atan):
-                    v = ChanSignals.LB0.value
+                return ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="13笔A3B5C5式")
 
             # ABC式底背驰，A5B5C3
             if bi_5.low < min(bi_1.low, bi_3.low) and bi_11.high > max(bi_9.high, bi_13.high) \
                     and min(bi_6.high, bi_8.high, bi_10.high) > max(bi_6.low, bi_8.low, bi_10.low) \
                     and bi_1.high - bi_5.low > bi_11.high - bi_13.low:
-                v = ChanSignals.LA0.value
-
-                if bi_13.height < bi_11.height and bi_13.atan <= bi_11.atan:
-                    v = ChanSignals.LB0.value
+                return ChanSignals.Q1L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一买', v2="13笔A5B5C3式")
 
     # 上涨线段时，判断背驰类型
     elif direction == 1:
         if max_high == bi_13.high and min_low == bi_1.low:
-            # aAbBC式顶背驰，bi_2-bi_6构成A，bi_8-bi_12构成B
-            if bi_8.low > min(bi_2.high, bi_4.high, bi_6.high) >= max(bi_2.low, bi_4.low, bi_6.low) \
-                    and min(bi_8.high, bi_10.high, bi_12.high) >= max(bi_8.low, bi_10.low, bi_12.low) \
-                    and max(bi_2.high, bi_4.high, bi_6.high) < min(bi_8.low, bi_10.low, bi_12.low) \
-                    and bi_13.height < bi_7.height and bi_13.atan <= bi_7.atan:
-                v = ChanSignals.SA0.value
-
             # ABC式顶背驰，A5B3C5
             if bi_5.high > max(bi_3.high, bi_1.high) and bi_9.low < min(bi_11.low, bi_13.low) \
                     and bi_8.low < bi_6.high and bi_5.high - bi_1.low > bi_13.high - bi_9.low:
-                v = ChanSignals.SA0.value
-                # C内部顶背驰，形成双重顶背驰
-                if bi_13.height < max(bi_11.height, bi_9.height) and bi_13.atan <= max(bi_11.atan, bi_9.atan):
-                    v = ChanSignals.SB0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2="13笔A5B3C5式")
 
             # ABC式顶背驰，A3B5C5
             if bi_3.high > max(bi_5.high, bi_1.high) and bi_9.low < min(bi_11.low, bi_13.low) \
                     and min(bi_4.high, bi_6.high, bi_8.high) > max(bi_4.low, bi_6.low, bi_8.low) \
                     and bi_3.high - bi_1.low > bi_13.high - bi_9.low:
-                v = ChanSignals.SA0.value
-                # C内部顶背驰，形成双重顶背驰
-                if bi_13.height < max(bi_11.height, bi_9.height) and bi_13.atan <= max(bi_11.atan, bi_9.atan):
-                    v = ChanSignals.SB0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2="13笔A3B5C5式")
 
             # ABC式顶背驰，A5B5C3
             if bi_5.high > max(bi_3.high, bi_1.high) and bi_11.low < min(bi_9.low, bi_13.low) \
                     and min(bi_6.high, bi_8.high, bi_10.high) > max(bi_6.low, bi_8.low, bi_10.low) \
                     and bi_5.high - bi_1.low > bi_13.high - bi_11.low:
-                v = ChanSignals.SA0.value
-                # C内部顶背驰，形成双重顶背驰
-                if bi_13.height < bi_11.height and bi_13.atan <= bi_11.atan:
-                    v = ChanSignals.SB0.value
+                return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2="13笔A5B5C3式")
+
     return v
 
 
-def check_pzbc_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+# def check_pzbc_1st(big_kline, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+def check_pzbc_1st(big_kline, small_kline, signal_direction: Direction):
     """
     判断中枢盘整背驰1买/1卖信号
     big_kline当前线段为调整段，与信号方向相反，线段具有盘整一个中枢，
@@ -806,7 +946,8 @@ def check_pzbc_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], 
     return False
 
 
-def check_qsbc_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+# def check_qsbc_1st(big_kline, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+def check_qsbc_1st(big_kline, small_kline, signal_direction: Direction):
     """
     判断趋势背驰1买/1卖信号
     big_kline当前线段为趋势，与信号方向相反，线段具有2个中枢，
@@ -890,7 +1031,8 @@ def check_qsbc_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], 
     return False
 
 
-def check_pz3bc_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+# def check_pz3bc_1st(big_kline, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+def check_pz3bc_1st(big_kline, small_kline, signal_direction: Direction):
     """
     判断三卖后盘整背驰一买/三买后盘整背驰1卖信号
     big_kline当前线段与信号方向相反，线段具有盘整一个中枢，离开中枢的一笔力度与三买/卖信号后的一笔对比（高度、斜率）
@@ -966,7 +1108,8 @@ def check_pz3bc_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None],
     return False
 
 
-def check_qjt_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+# def check_qjt_1st(big_kline, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+def check_qjt_1st(big_kline, small_kline, signal_direction: Direction):
     """
     判断区间套一买/区间套1卖信号
     big_kline当前线段与信号方向相反，线段具有盘整一个中枢，
@@ -1038,7 +1181,8 @@ def check_qjt_1st(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], s
     return False
 
 
-def check_qsbc_2nd(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+# def check_qsbc_2nd(big_kline, small_kline: Union[CtaLineBar, None], signal_direction: Direction):
+def check_qsbc_2nd(big_kline, small_kline, signal_direction: Direction):
     """
     判断趋势背驰1买/1卖后的二买、二卖信号
     big_kline当前线段为趋势，与信号方向相反，线段具有2个中枢，
@@ -1136,8 +1280,9 @@ def check_qsbc_2nd(big_kline: CtaLineBar, small_kline: Union[CtaLineBar, None], 
     return True
 
 
-def check_zs_3rd(big_kline: CtaLineBar,
-                 small_kline: Union[CtaLineBar, None],
+# : Union[CtaLineBar, None]
+def check_zs_3rd(big_kline,
+                 small_kline,
                  signal_direction: Direction,
                  first_zs: bool = True,
                  all_zs: bool = True):
@@ -1181,7 +1326,7 @@ def check_zs_3rd(big_kline: CtaLineBar,
         zs_list = [zs for zs in big_kline.bi_zs_list[-3:] if zs.start >= big_kline.cur_duan.start]
         zs_num = len(zs_list)
         # 是否现在线段得首个中枢后的三买三卖
-        if first_zs and zs_num> 1:
+        if first_zs and zs_num > 1:
             return False
     else:
         # 中枢需要与当前线段有交集[部分交集、或中枢完全在当前段内形成]

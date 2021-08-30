@@ -415,7 +415,7 @@ class PbGateway(BaseGateway):
     def process_timer_event(self, event) -> None:
         """"""
         self.count += 1
-        if self.count < 2:
+        if self.count < 5:
             return
         self.count = 0
 
@@ -1116,10 +1116,26 @@ class PbTdApi(object):
                                                    '{}{}.dbf'.format(
                                                        PB_FILE_NAMES.get('accounts'),
                                                        self.trading_date)))
+
+        copy_dbf = os.path.abspath(os.path.join(self.account_folder,
+                                                   '{}{}_{}.dbf'.format(
+                                                       PB_FILE_NAMES.get('accounts'),
+                                                       self.trading_date,
+                                                   datetime.now().strftime('%H%M'))))
         try:
+            if not os.path.exists(account_dbf):
+                return
+            if os.path.exists(copy_dbf):
+                os.remove(copy_dbf)
+
+            # =》转移至于新文件
+            os.rename(account_dbf, copy_dbf)
+            if not os.path.exists(copy_dbf):
+                return
+
             # dbf => 资金帐号信息
-            self.gateway.write_log(f'扫描资金帐号信息:{account_dbf}')
-            table = dbf.Table(account_dbf, codepage='cp936')
+            self.gateway.write_log(f'扫描资金帐号信息:{copy_dbf}')
+            table = dbf.Table(copy_dbf, codepage='cp936')
             table.open(dbf.READ_ONLY)
             for data in table:
                 # ["资金账户"]
@@ -1137,6 +1153,8 @@ class PbTdApi(object):
 
             table.close()
             self.warning_dict.pop('query_account', None)
+            if os.path.exists(copy_dbf):
+                os.remove(copy_dbf)
 
         except Exception as ex:
             err_msg = f'dbf扫描资金帐号异常:{str(ex)}'
@@ -1200,10 +1218,24 @@ class PbTdApi(object):
                                                     '{}{}.dbf'.format(
                                                         PB_FILE_NAMES.get('positions'),
                                                         self.trading_date)))
+
+        copy_dbf = os.path.abspath(os.path.join(self.account_folder,
+                                                    '{}{}_{}.dbf'.format(
+                                                        PB_FILE_NAMES.get('positions'),
+                                                        self.trading_date,
+                                                    datetime.now().strftime('%H%M'))))
         try:
+            if not os.path.exists(position_dbf):
+                return
+            if os.path.exists(copy_dbf):
+                os.remove(copy_dbf)
+            os.rename(position_dbf, copy_dbf)
+            if not os.path.exists(copy_dbf):
+                return
+
             # dbf => 股票持仓信息
-            self.gateway.write_log(f'扫描股票持仓信息:{position_dbf}')
-            table = dbf.Table(position_dbf, codepage='cp936')
+            self.gateway.write_log(f'扫描股票持仓信息:{copy_dbf}')
+            table = dbf.Table(copy_dbf, codepage='cp936')
             table.open(dbf.READ_ONLY)
             for data in table:
                 if str(data.zjzh).strip() != self.userid:
@@ -1241,6 +1273,9 @@ class PbTdApi(object):
 
             table.close()
             self.warning_dict.pop('query_position', None)
+
+            if os.path.exists(copy_dbf):
+                os.remove(copy_dbf)
 
         except Exception as ex:
 
@@ -1325,6 +1360,8 @@ class PbTdApi(object):
                                                       PB_FILE_NAMES.get('orders'),
                                                       self.trading_date)))
         try:
+            if not os.path.exists(orders_dbf):
+                return
             # dbf => 股票委托信息
             self.gateway.write_log(f'扫描股票委托信息:{orders_dbf}')
             table = dbf.Table(orders_dbf, codepage='cp936')
@@ -1506,8 +1543,9 @@ class PbTdApi(object):
                                                   '{}{}.dbf'.format(
                                                       PB_FILE_NAMES.get('update_orders'),
                                                       self.trading_date)))
-        # dbf => 所有委托记录
         try:
+            if not os.path.exists(orders_dbf):
+                return
             # dbf => 所有成交记录
             self.gateway.write_log(f'扫描所有委托查询:{orders_dbf}')
             table = dbf.Table(orders_dbf, codepage='cp936')
@@ -1686,6 +1724,8 @@ class PbTdApi(object):
                                                       PB_FILE_NAMES.get('trades'),
                                                       self.trading_date)))
         try:
+            if not os.path.exists(trades_dbf):
+                return
             # dbf => 股票成交信息
             self.gateway.write_log(f'扫描股票成交信息:{trades_dbf}')
             table = dbf.Table(trades_dbf, codepage='cp936')
@@ -1824,6 +1864,8 @@ class PbTdApi(object):
                                                       self.trading_date)))
 
         try:
+            if not os.path.exists(trades_dbf):
+                return
             # dbf => 所有成交记录
             self.gateway.write_log(f'扫描所有成交记录:{trades_dbf}')
             table = dbf.Table(trades_dbf, codepage='cp936')
@@ -1981,6 +2023,9 @@ class PbTdApi(object):
         dbf_file = os.path.abspath(os.path.join(self.order_folder,
                                                 '{}{}.dbf'.format(PB_FILE_NAMES.get('send_order'), self.trading_date)))
         try:
+            if not os.path.exists(dbf_file):
+                return
+
             table = dbf.Table(dbf_file, codepage='cp936')
             table.open(dbf.READ_ONLY)
             for record in table:

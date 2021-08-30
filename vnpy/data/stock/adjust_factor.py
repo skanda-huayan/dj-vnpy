@@ -112,7 +112,7 @@ def download_adjust_factor():
     login_msg = bs.login()
     if login_msg.error_code != '0':
         print(f'证券宝登录错误代码:{login_msg.error_code}, 错误信息:{login_msg.error_msg}')
-        return
+        return None
 
     for k, v in base_dict.items():
         if v.get('类型') != '股票':
@@ -127,6 +127,7 @@ def download_adjust_factor():
         save_data_to_pkb2(factor_dict, cache_file_name)
         print(f'保存除权除息至文件:{cache_file_name}')
 
+    return factor_dict
 
 if __name__ == '__main__':
     download_adjust_factor()
