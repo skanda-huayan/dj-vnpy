@@ -476,40 +476,68 @@ class CtaStockTemplate(CtaTemplate):
             self.write_log(u'保存policy数据')
             self.policy.save()
 
-    def save_klines_to_cache(self, kline_names: list = []):
+    def save_klines_to_cache(self, kline_names: list = [], vt_symbol: str = ""):
         """
         保存K线数据到缓存
         :param kline_names: 一般为self.klines的keys
+        :param vt_symbol: 指定股票代码,
+            如果使用该选项，加载 data/klines/strategyname_vtsymbol_klines.pkb2
+            如果空白，加载 data/strategyname_klines.pkb2
         :return:
         """
         if len(kline_names) == 0:
             kline_names = list(self.klines.keys())
 
-        # 获取保存路径
-        save_path = self.cta_engine.get_data_path()
-        # 保存缓存的文件名
-        file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
-        with bz2.BZ2File(file_name, 'wb') as f:
-            klines = {}
-            for kline_name in kline_names:
-                kline = self.klines.get(kline_name, None)
-                # if kline:
-                #    kline.strategy = None
-                #    kline.cb_on_bar = None
-                klines.update({kline_name: kline})
-            pickle.dump(klines, f)
+        try:
+            # 如果是指定合约的话，使用klines子目录
+            if len(vt_symbol) > 0:
+                kline_names = [n for n in kline_names if vt_symbol in n]
+                save_path = os.path.abspath(os.path.join(self.cta_engine.get_data_path(), 'klines'))
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_{vt_symbol}_klines.pkb2'))
+            else:
+                # 获取保存路径
+                save_path = self.cta_engine.get_data_path()
+                # 保存缓存的文件名
+                file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
 
-    def load_klines_from_cache(self, kline_names: list = []):
+            with bz2.BZ2File(file_name, 'wb') as f:
+                klines = {}
+                for kline_name in kline_names:
+                    kline = self.klines.get(kline_name, None)
+                    # if kline:
+                    #    kline.strategy = None
+                    #    kline.cb_on_bar = None
+                    klines.update({kline_name: kline})
+                pickle.dump(klines, f)
+            self.write_log(f'保存{vt_symbol} K线数据成功=>{file_name}')
+        except Exception as ex:
+            self.write_error(f'保存k线数据异常:{str(ex)}')
+            self.write_error(traceback.format_exc())
+
+    def load_klines_from_cache(self, kline_names: list = [], vt_symbol: str = ""):
         """
         从缓存加载K线数据
         :param kline_names: 指定需要加载的k线名称列表
+        :param vt_symbol: 指定股票代码,
+            如果使用该选项，加载 data/klines/strategyname_vtsymbol_klines.pkb2
+            如果空白，加载 data/strategyname_klines.pkb2
         :return:
         """
         if len(kline_names) == 0:
             kline_names = list(self.klines.keys())
 
-        save_path = self.cta_engine.get_data_path()
-        file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
+        # 如果是指定合约的话，使用klines子目录
+        if len(vt_symbol) > 0:
+            kline_names = [n for n in kline_names if vt_symbol in n]
+            save_path = os.path.abspath(os.path.join(self.cta_engine.get_data_path(), 'klines'))
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_{vt_symbol}_klines.pkb2'))
+        else:
+            save_path = self.cta_engine.get_data_path()
+            file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
         try:
             last_bar_dt = None
             with bz2.BZ2File(file_name, 'rb') as f:
@@ -976,7 +1004,7 @@ class CtaStockTemplate(CtaTemplate):
                 self.gt.remove_grids_by_ids(direction=Direction.LONG, ids=remove_gids)
             self.gt.save()
 
-    def tns_excute_sell_grids(self, vt_symbol=None):
+    def tns_excute_sell_grids(self, vt_symbol=None, force=False):
         """
         事务执行卖出网格
          1、找出所有order_status=True,open_status=Talse, close_status=True的网格。
@@ -1027,17 +1055,27 @@ class CtaStockTemplate(CtaTemplate):
             sell_volume = ordering_grid.volume - ordering_grid.traded_volume
 
             if sell_volume > acc_symbol_pos.volume:
-                self.write_error(u'账号{}持仓{},不满足减仓目标:{}'
-                                   .format(vt_symbol, acc_symbol_pos.volume, sell_volume))
+                if not force:
+                    self.write_error(u'账号{}持仓{},不满足减仓目标:{}'
+                                       .format(vt_symbol, acc_symbol_pos.volume, sell_volume))
+                    continue
+                else:
+                    self.write_log(u'账号{}持仓{},不满足减仓目标:{}, 修正卖出数量:{}=>{}'
+                                   .format(vt_symbol, acc_symbol_pos.volume, sell_volume, sell_volume,
+                                           acc_symbol_pos.volume))
+                    sell_volume = acc_symbol_pos.volume
+
+            if sell_volume == 0:
+                self.write_log(f'账号{vt_symbol}持仓{acc_symbol_pos.volume},卖出目标:{sell_volume}=0 不执行')
+                continue
+
+            cur_price = self.cta_engine.get_price(vt_symbol)
+            if not cur_price:
+                self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
                 continue
 
             # 实盘运行时，要加入市场买卖量的判断
-            if not self.backtesting:
-                cur_price = self.cta_engine.get_price(vt_symbol)
-                if not cur_price:
-                    self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
-                    continue
-
+            if not force and not self.backtesting:
                 symbol_tick = self.cta_engine.get_tick(vt_symbol)
                 if symbol_tick:
                     symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
@@ -1072,7 +1110,7 @@ class CtaStockTemplate(CtaTemplate):
                 self.write_log(f'{vt_symbol} 已委托卖出，{sell_volume},委托价:{sell_price}, 数量:{sell_volume}')
 
 
-    def tns_finish_sell_grid(self, grid):
+    def tns_finish_sell_grid(self, grid:CtaGrid):
         """
         事务完成卖出网格
         :param grid:
@@ -1106,7 +1144,7 @@ class CtaStockTemplate(CtaTemplate):
         self.gt.save()
         self.policy.save()
 
-    def tns_execute_buy_grids(self, vt_symbol=None):
+    def tns_execute_buy_grids(self, vt_symbol=None, force=False):
         """
         事务执行买入网格
         :return:
@@ -1149,7 +1187,8 @@ class CtaStockTemplate(CtaTemplate):
 
             balance, availiable, _, _ = self.cta_engine.get_account()
             if availiable <= 0:
-                self.write_error(u'当前可用资金不足'.format(availiable))
+                if not self.backtesting:
+                    self.write_log(u'当前可用资金{}不足,总资金:{}'.format(availiable, balance))
                 continue
             vt_symbol = ordering_grid.vt_symbol
             cur_price = self.cta_engine.get_price(vt_symbol)
@@ -1178,7 +1217,7 @@ class CtaStockTemplate(CtaTemplate):
                 buy_volume = max_buy_volume
 
             # 实盘运行时，要加入市场买卖量的判断
-            if not self.backtesting and 'market' in ordering_grid.snapshot:
+            if not force and not self.backtesting and 'market' in ordering_grid.snapshot:
                 symbol_tick = self.cta_engine.get_tick(vt_symbol)
                 if symbol_tick:
                     # 根据市场计算，前5档买单数量
@@ -1207,7 +1246,7 @@ class CtaStockTemplate(CtaTemplate):
             else:
                 self.write_log(f'{self.strategy_name}, {vt_orderids},已委托买入，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
 
-    def tns_finish_buy_grid(self, grid):
+    def tns_finish_buy_grid(self, grid:CtaGrid):
         """
         事务完成买入网格
         :return:

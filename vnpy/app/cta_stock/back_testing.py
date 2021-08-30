@@ -589,7 +589,7 @@ class BackTestingEngine(object):
         股票数据复权转换
         :param raw_data: 不复权数据
         :param adj_data:  复权记录 ( 从barstock下载的复权记录列表=》df）
-        :param adj_type: 复权类型
+        :param adj_type: 复权类型: fore 前复权, 其他：后复权
         :return:
         """
 
@@ -1735,7 +1735,8 @@ class BackTestingEngine(object):
         # 返回回测结果
         d = {}
         d['init_capital'] = self.init_capital
-        d['profit'] = self.cur_capital - self.init_capital
+        d['net_capital'] = self.net_capital
+        d['profit'] = self.net_capital - self.init_capital
         d['max_capital'] = self.max_net_capital  # 取消原 maxCapital
 
         if len(self.pnl_list) == 0:
@@ -1815,6 +1816,9 @@ class BackTestingEngine(object):
 
         result_info.update({u'期初资金': d['init_capital']})
         self.output(u'期初资金：\t%s' % format_number(d['init_capital']))
+
+        result_info.update({u'期末资金': d['net_capital']})
+        self.output(u'期末资金：\t%s' % format_number(d['net_capital']))
 
         result_info.update({u'总盈亏': d['profit']})
         self.output(u'总盈亏：\t%s' % format_number(d['profit']))

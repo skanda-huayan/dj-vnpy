@@ -15,6 +15,7 @@ import traceback
 import random
 import bz2
 import pickle
+import numpy as np
 
 from datetime import datetime, timedelta
 from time import sleep
@@ -31,6 +32,7 @@ from vnpy.trader.constant import (
 from vnpy.trader.utility import (
     get_trading_date,
     extract_vt_symbol,
+    get_csv_last_dt
 )
 
 from .back_testing import BackTestingEngine
@@ -57,7 +59,7 @@ class PortfolioTestingEngine(BackTestingEngine):
 
         self.tick_path = None  # tick级别回测， 路径
 
-    def load_bar_csv_to_df(self, vt_symbol, bar_file, data_start_date=None, data_end_date=None):
+    def load_bar_csv_to_df(self, vt_symbol, bar_file, data_start_date=None, data_end_date=None, qfq=True):
         """
         加载回测bar数据到DataFrame
         1. 增加前复权/后复权
@@ -65,14 +67,16 @@ class PortfolioTestingEngine(BackTestingEngine):
         :param bar_file:
         :param data_start_date:
         :param data_end_date:
+        :param qfq:True 前复权，False 后复权
         :return:
         """
-        self.output(u'loading {} from {}'.format(vt_symbol, bar_file))
+        fq_name = '前复权' if qfq else '后复权'
+        self.output(u'加载数据[{}] :未复权文件{}，复权转换:{}'.format(vt_symbol, bar_file, fq_name))
         if vt_symbol in self.bar_df_dict:
             return True
 
         if bar_file is None or not os.path.exists(bar_file):
-            self.write_error(u'回测时，{}对应的csv bar文件{}不存在'.format(vt_symbol, bar_file))
+            self.write_error(u'加载数据[{}]:对应的csv bar文件{}不存在'.format(vt_symbol, bar_file))
             return False
 
         try:
@@ -93,34 +97,64 @@ class PortfolioTestingEngine(BackTestingEngine):
                 "date": str,
                 "time": str
             }
-            # 加载csv文件 =》 dateframe
-            symbol_df = pd.read_csv(bar_file, dtype=data_types)
-            # 转换时间，str =》 datetime
-            symbol_df["datetime"] = pd.to_datetime(symbol_df["datetime"], format="%Y-%m-%d %H:%M:%S")
-            # 设置时间为索引
-            symbol_df = symbol_df.set_index("datetime")
 
-            # 裁剪数据
-            symbol_df = symbol_df.loc[self.test_start_date:self.test_end_date]
+            symbol_df = None
+            auto_generate_fq = True
+            # 复权文件
+            fq_bar_file = bar_file.replace('.csv', '_qfq.csv' if qfq else '_hfq.csv')
+            if os.path.exists(fq_bar_file):
+                # 存在复权文件
+                last_dt = get_csv_last_dt(fq_bar_file)
+                if isinstance(last_dt, datetime):
+                    if last_dt.strftime('%Y-%m-%d') < self.test_end_date:
+                        self.write_log(f'加载数据[{vt_symbol}], 使用{fq_name}文件:{fq_bar_file}')
+                        symbol_df = pd.read_csv(bar_file, dtype=data_types)
+                        # 转换时间，str =》 datetime
+                        symbol_df["datetime"] = pd.to_datetime(symbol_df["datetime"], format="%Y-%m-%d %H:%M:%S")
+                        # 设置时间为索引
+                        symbol_df = symbol_df.set_index("datetime")
+                        # 裁剪数据
+                        symbol_df = symbol_df.loc[self.test_start_date:self.test_end_date]
+                        # 不再产生复权文件
+                        auto_generate_fq = False
 
-            # 复权转换
-            adj_list = self.adjust_factors.get(vt_symbol, [])
-            # 按照结束日期，裁剪复权记录
-            adj_list = [row for row in adj_list if row['dividOperateDate'].replace('-', '') <= self.test_end_date]
+            if not isinstance(symbol_df, pd.DataFrame):
+                # 加载csv文件 =》 dateframe
+                symbol_df = pd.read_csv(bar_file, dtype=data_types)
+                # 转换时间，str =》 datetime
+                symbol_df["datetime"] = pd.to_datetime(symbol_df["datetime"], format="%Y-%m-%d %H:%M:%S")
+                # 设置时间为索引
+                symbol_df = symbol_df.set_index("datetime")
 
-            if adj_list:
-                self.write_log(f'需要对{vt_symbol}进行前复权处理')
-                for row in adj_list:
-                    row.update({'dividOperateDate': row.get('dividOperateDate') + ' 09:31:00'})
-                # list -> dataframe, 转换复权日期格式
-                adj_data = pd.DataFrame(adj_list)
-                adj_data["dividOperateDate"] = pd.to_datetime(adj_data["dividOperateDate"], format="%Y-%m-%d %H:%M:%S")
-                adj_data = adj_data.set_index("dividOperateDate")
-                # 调用转换方法，对open,high,low,close, volume进行复权, fore, 前复权， 其他，后复权
-                symbol_df = self.stock_to_adj(symbol_df, adj_data, adj_type='fore')
+                # 裁剪数据
+                symbol_df = symbol_df.loc[self.test_start_date:self.test_end_date]
 
-            # 添加到待合并dataframe dict中
-            self.bar_df_dict.update({vt_symbol: symbol_df})
+                # 复权转换
+                adj_list = self.adjust_factors.get(vt_symbol, [])
+                # 按照结束日期，裁剪复权记录
+                adj_list = [row for row in adj_list if row['dividOperateDate'].replace('-', '') <= self.test_end_date]
+
+                if adj_list:
+                    self.write_log(f'加载数据[{vt_symbol}], 对{vt_symbol}进行{fq_name}处理')
+                    for row in adj_list:
+                        d = row.get('dividOperateDate', "")[0:10]
+                        if len(d) == 10:
+                            row.update({'dividOperateDate': d + ' 09:31:00'})
+                    # list -> dataframe, 转换复权日期格式
+                    adj_data = pd.DataFrame(adj_list)
+                    adj_data["dividOperateDate"] = pd.to_datetime(adj_data["dividOperateDate"],
+                                                                  format="%Y-%m-%d %H:%M:%S")
+                    adj_data = adj_data.set_index("dividOperateDate")
+                    # 调用转换方法，对open,high,low,close, volume进行复权, fore, 前复权， 其他，后复权
+                    symbol_df = self.stock_to_adj(symbol_df, adj_data, adj_type='fore' if qfq else "")
+
+                    if auto_generate_fq:
+                        self.write_log(f'加载数据[{vt_symbol}] ,缓存{fq_name}文件=>{fq_bar_file}')
+                        symbol_df.to_csv(fq_bar_file)
+
+            if isinstance(symbol_df, pd.DataFrame):
+                # 添加到待合并dataframe dict中
+                self.bar_df_dict.update({vt_symbol: symbol_df})
 
         except Exception as ex:
             self.write_error(u'回测时读取{} csv文件{}失败:{}'.format(vt_symbol, bar_file, ex))
@@ -277,7 +311,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                     bar.high_price = float(bar_data['high_price'])
                     bar.low_price = float(bar_data['low_price'])
 
-                bar.volume = int(bar_data['volume'])
+                bar.volume = float(bar_data['volume'])
                 bar.date = dt.strftime('%Y-%m-%d')
                 bar.time = dt.strftime('%H:%M:%S')
                 str_td = str(bar_data.get('trading_day', ''))
@@ -299,6 +333,8 @@ class PortfolioTestingEngine(BackTestingEngine):
                     # bar时间与队列时间不一致，先推送队列的bars
                     random.shuffle(bars_same_dt)
                     for _bar_ in bars_same_dt:
+                        if np.isnan(_bar_.close_price):
+                            continue
                         self.new_bar(_bar_)
 
                     # 创建新的队列
