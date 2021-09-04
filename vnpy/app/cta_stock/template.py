@@ -20,6 +20,7 @@ from .base import StopOrder,EngineType
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade
 from vnpy.component.cta_position import CtaPosition
 from vnpy.component.cta_policy import CtaPolicy
+from vnpy.component.base import MyEncoder
 
 class CtaTemplate(ABC):
     """CTA股票策略模板"""
@@ -602,7 +603,7 @@ class CtaStockTemplate(CtaTemplate):
         """初始化Policy"""
         self.write_log(u'init_policy(),初始化执行逻辑')
         self.policy.load()
-        self.write_log('{}'.format(json.dumps(self.policy.to_json(),indent=2, ensure_ascii=False)))
+        self.write_log('{}'.format(json.dumps(self.policy.to_json(),indent=2, ensure_ascii=False,cls=MyEncoder)))
 
     def init_position(self):
         """
@@ -1075,9 +1076,12 @@ class CtaStockTemplate(CtaTemplate):
                 continue
 
             # 实盘运行时，要加入市场买卖量的判断
+            limit_down = None
             if not force and not self.backtesting:
                 symbol_tick = self.cta_engine.get_tick(vt_symbol)
                 if symbol_tick:
+                    if symbol_tick.limit_down > 0:
+                        limit_down = symbol_tick.limit_down
                     symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
                     # 根据市场计算，前5档买单数量
                     if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
@@ -1095,7 +1099,11 @@ class CtaStockTemplate(CtaTemplate):
                                 self.write_log(u'修正批次卖出{}数量:{}=>{}'.format(vt_symbol, org_sell_volume, sell_volume))
 
             # 获取当前价格
-            sell_price =  cur_price - self.cta_engine.get_price_tick(vt_symbol)
+            if limit_down is None or cur_price > limit_down:
+                sell_price = cur_price - self.cta_engine.get_price_tick(vt_symbol)
+            else:
+                sell_price = cur_price
+
             # 发出委托卖出
             vt_orderids = self.sell(
                 vt_symbol=vt_symbol,
@@ -1134,7 +1142,7 @@ class CtaStockTemplate(CtaTemplate):
         dist_record = dict()
         dist_record['volume'] = grid.volume
         dist_record['price'] = self.cta_engine.get_price(grid.vt_symbol)
-        dist_record['operation'] = 'execute finished'
+        dist_record['operation'] = 'sell finished'
         dist_record['signal'] = grid.type
         self.save_dist(dist_record)
 
@@ -1322,6 +1330,11 @@ class CtaStockTemplate(CtaTemplate):
             elif order_status == Status.CANCELLED:
                 self.write_log(u'委托单{}已成功撤单，删除{}'.format(vt_orderid, order_info))
                 canceled_ids.append(vt_orderid)
+            elif order_status == Status.CANCELLING:
+
+                if over_seconds > self.cancel_seconds * 3:
+                    self.write_log(u'委托单{}正在撤单，超时{},删除{}'.format(vt_orderid,over_seconds, order_info))
+                    canceled_ids.append(vt_orderid)
 
         # 删除撤单的订单
         for vt_orderid in canceled_ids:
@@ -1381,7 +1394,7 @@ class CtaStockTemplate(CtaTemplate):
             policy = getattr(self, 'policy')
             op = getattr(policy, 'to_json', None)
             if callable(op):
-                self.write_log(u'当前Policy:{}'.format(json.dumps(policy.to_json(), indent=2, ensure_ascii=False)))
+                self.write_log(u'当前Policy:{}'.format(json.dumps(policy.to_json(), indent=2, ensure_ascii=False,cls=MyEncoder)))
 
     def save_dist(self, dist_data):
         """

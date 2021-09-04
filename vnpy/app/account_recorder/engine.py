@@ -243,7 +243,7 @@ class AccountRecorder(BaseEngine):
                         end_day = dt_now.strftime('%Y%m%d')
                         gw = self.main_engine.get_gateway(gw_name)
                         if gw is None:
-                            continue
+                            self.write_log(f'Account_recorder找不到{gw_name}')
                         if hasattr(gw, 'qryHistory'):
                             self.write_log(u'向{}请求{}数据，{}~{}'.format(gw_name, data_type, begin_day, end_day))
                             gw.qryHistory(data_type, begin_day, end_day)

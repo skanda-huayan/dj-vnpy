@@ -20,7 +20,7 @@ from .base import StopOrder
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade
 from vnpy.component.cta_position import CtaPosition
 from vnpy.component.cta_policy import CtaPolicy
-
+from vnpy.component.base import MyEncoder
 
 class CtaTemplate(ABC):
     """CTA策略模板"""
@@ -1368,7 +1368,7 @@ class CtaFutureTemplate(CtaTemplate):
             if policy:
                 op = getattr(policy, 'to_json', None)
                 if callable(op):
-                    self.write_log(u'当前Policy:{}'.format(json.dumps(policy.to_json(), indent=2, ensure_ascii=False)))
+                    self.write_log(u'当前Policy:{}'.format(json.dumps(policy.to_json(), indent=2, ensure_ascii=False,cls=MyEncoder)))
 
     def save_dist(self, dist_data):
         """
@@ -2152,7 +2152,7 @@ class CtaSpotTemplate(CtaTemplate):
             if policy:
                 op = getattr(policy, 'to_json', None)
                 if callable(op):
-                    self.write_log(u'当前Policy:{}'.format(json.dumps(policy.to_json(), indent=2, ensure_ascii=False)))
+                    self.write_log(u'当前Policy:{}'.format(json.dumps(policy.to_json(), indent=2, ensure_ascii=False,cls=MyEncoder)))
 
     def save_dist(self, dist_data):
         """

@@ -140,6 +140,7 @@ class RestClient(object):
         self.logger: Optional[logging.Logger] = None
 
         self.proxies = None
+        self.cookies = {}
 
         self.thread_executor = ThreadPoolExecutor(max_workers=os.cpu_count() * 20)
 
@@ -436,8 +437,13 @@ class RestClient(object):
                         if status_code == 204:
                             json_body = None
                         else:
-                            json_body = response.json()
+                            try:
+                                json_body = response.json()
+                            except Exception as ex:
+                                json_body = response.content.decode('utf-8')
                         self._process_json_body(json_body, request)
+                        if response.cookies.get_dict():
+                            self.cookies.update(response.cookies)
                     else:
                         if request.on_failed:
                             request.status = RequestStatus.failed
@@ -462,7 +468,7 @@ class RestClient(object):
             else:
                 self.on_error(t, v, tb, request)
 
-    def _process_json_body(self, json_body: Optional[dict], request: "Request"):
+    def _process_json_body(self, json_body: Union[dict,str], request: "Request"):
         status_code = request.response.status_code
         if self.is_request_success(json_body, request):
             request.status = RequestStatus.success

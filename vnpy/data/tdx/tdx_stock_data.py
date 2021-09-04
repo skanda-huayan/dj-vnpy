@@ -314,13 +314,18 @@ class TdxStockData(object):
 
         self.write_log('{}开始下载tdx股票: {},代码:{} {}数据, {} to {}.'
                        .format(datetime.now(), name, tdx_code, tdx_period, qry_start_date, qry_end_date))
+        stock_type = get_stock_type(tdx_code,market_id)
+        if stock_type == 'index_cn':
+            get_bar_func = self.api.get_index_bars
+        else:
+            get_bar_func = self.api.get_security_bars
 
         try:
             _start_date = qry_end_date
             _bars = []
             _pos = 0
             while _start_date > qry_start_date:
-                _res = self.api.get_security_bars(
+                _res = get_bar_func(
                     category=PERIOD_MAPPING[period],
                     market=market_id,
                     code=tdx_code,
@@ -452,8 +457,13 @@ class TdxStockData(object):
                              .format(datetime.now(), period, list(PERIOD_MAPPING.keys())))
             return False, ret_bars
         tdx_period = PERIOD_MAPPING.get(period)
+        stock_type = get_stock_type(tdx_code)
+        if stock_type == 'index_cn':
+            get_bar_func = self.api.get_index_bars
+        else:
+            get_bar_func = self.api.get_security_bars
         try:
-            datas = self.api.get_security_bars(
+            datas = get_bar_func(
                 category=PERIOD_MAPPING[period],
                 market=market_id,
                 code=tdx_code,
@@ -489,6 +499,8 @@ class TdxStockData(object):
         except Exception as ex:
             self.write_error(f'获取{symbol}数据失败:{str(ex)}')
             return False, ret_bars
+
+        # ----------------------------------------------------------------------
 
     def save_cache(self,
                    cache_folder: str,

@@ -147,18 +147,15 @@ def refill(symbol_info):
     #     thread_tasks.append(task)
 
 
-def resample(symbol, exchange, x_mins=[5, 15, 30]):
+def resample(vt_symbol, x_mins=[5, 15, 30]):
     """
     更新多周期文件
-    :param symbol:
-    :param exchange:
+    :param vt_symbol: 代码.交易所
     :param x_mins:
     :return:
     """
     d1 = datetime.now()
-    out_files, err_msg = resample_bars_file(vnpy_root=vnpy_root,
-                                            symbol=symbol,
-                                            exchange=exchange,
+    out_files, err_msg = resample_bars_file(vt_symbol=vt_symbol,
                                             x_mins=x_mins)
     d2 = datetime.now()
     microseconds = round((d2 - d1).microseconds / 100, 0)

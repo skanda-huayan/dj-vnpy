@@ -940,11 +940,21 @@ class ThsTdApi(object):
                 return
             if '总资产' not in data:
                 return
+
+            ## 为了兼容东财的webapi，这里frozen做个特殊处理
+            # if "冻结金额" in data:
+            #     # 同花顺直接给了冻结金额
+            #     frozen = float(data["冻结金额"])
+            # else:
+            #     # 东财没有冻结金额这个项目，要计算
+            #     frozen = float(data["总资产"]) - float(data["资金余额"])
+            frozen = 0
+
             account = AccountData(
                 gateway_name=self.gateway_name,
                 accountid=self.userid,
                 balance=float(data["总资产"]),
-                frozen=float(data["总资产"]) - float(data["资金余额"]),
+                frozen=frozen,
                 currency="人民币",
                 trading_day=self.trading_day
             )

@@ -76,7 +76,7 @@ from .base import (
     STOPORDER_PREFIX,
 )
 from .template import CtaTemplate
-from vnpy.component.base import MARKET_DAY_ONLY
+from vnpy.component.base import MARKET_DAY_ONLY, MyEncoder
 from vnpy.component.cta_position import CtaPosition
 
 STOP_STATUS_MAP = {

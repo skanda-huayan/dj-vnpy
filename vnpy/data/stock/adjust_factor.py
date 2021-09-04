@@ -130,4 +130,21 @@ def download_adjust_factor():
     return factor_dict
 
 if __name__ == '__main__':
-    download_adjust_factor()
+
+    # 下载所有复权数据
+    # download_adjust_factor()
+
+    # 下载某个股票的复权数据
+    # f = get_adjust_factor(vt_symbol='000651.SZSE',stock_name='格力电器',need_login=True)
+    #
+    # for d in f:
+    #     print(d)
+
+    # 读取缓存文件中某只股票的复权数据
+    factors = get_all_adjust_factor()
+    f = factors.get('000651.SZSE',None)
+    if f is None:
+        print('获取不到数据')
+    else:
+        for d in f:
+             print(d)

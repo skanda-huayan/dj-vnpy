@@ -114,7 +114,7 @@ class RemoteClient:
 # 整个接口对外保持和原来的一致
 # 通过对原requests接口的“鸭子类型替换”来实现透明化
 
-def use(broker, host, port=1430, use_zmq=True, **kwargs):
+def use(broker, host, port=1430, use_zmq=False, **kwargs):
     if use_zmq:
         return ZMQRemoteClient(broker, host, port)
     else:

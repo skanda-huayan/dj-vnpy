@@ -34,7 +34,7 @@ TDX_PROXY_CONFIG = 'tdx_proxy_config.json'
 def get_tdx_market_code(code):
     # 获取通达信股票的market code
     code = str(code)
-    if code[0] in ['5', '6', '9'] or code[:3] in ["009", "126", "110", "201", "202", "203", "204"]:
+    if code[0] in ['5', '6', '9'] or code[:3] in ["880","009", "126", "110", "201", "202", "203", "204"]:
         # 上海证券交易所
         return 1
     # 深圳证券交易所
@@ -101,10 +101,13 @@ def get_cache_config(config_file_name):
     config = {}
     if not os.path.exists(config_file_name):
         return config
-    with bz2.BZ2File(config_file_name, 'rb') as f:
-        config = pickle.load(f)
+    try:
+        with bz2.BZ2File(config_file_name, 'rb') as f:
+            config = pickle.load(f)
+            return config
+    except Exception as ex:
+        print(f'读取缓存本地文件:{config_file_name}异常{str(ex)}')
         return config
-
 
 def save_cache_config(data: dict, config_file_name):
     """保存本地缓存的配置地址信息"""
@@ -126,9 +129,10 @@ def save_cache_json(data_dict: dict, json_file_name: str):
     save_json(filename=config_file_name, data=data_dict)
 
 
-def get_stock_type(code):
+def get_stock_type(code,market_id = None ):
     """获取股票得分类"""
-    market_id = get_tdx_market_code(code)
+    if market_id is None:
+        market_id = get_tdx_market_code(code)
 
     if market_id == 0:
         return get_stock_type_sz(code)

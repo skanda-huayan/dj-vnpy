@@ -578,16 +578,20 @@ class IndexGenerator:
         self.exchange = setting.get('exchange', None)
         self.price_tick = setting.get('price_tick')
         self.symbols = setting.get('symbols', {})
+        self.pre_oi_total = 1
+
         # 订阅行情
         self.subscribe()
 
         self.n = len(self.symbols)
+
 
     def subscribe(self):
         """订阅行情"""
         dt_now = datetime.now()
         for symbol in list(self.symbols.keys()):
             pre_open_interest = self.symbols.get(symbol,0)
+            self.pre_oi_total += pre_open_interest
             # 全路径合约 => 标准合约 ,如 ZC2109 => ZC109, RB2110 => rb2110
             vn_symbol = get_real_symbol_by_exchange(symbol, Exchange(self.exchange))
             # 先移除
@@ -596,6 +600,9 @@ class IndexGenerator:
                 self.gateway.write_log(f'移除早于当月的合约{symbol}')
                 continue
 
+            if pre_open_interest < 100:
+                self.gateway.write_log(f'移除持仓量:{pre_open_interest}低于100的合约{symbol}')
+                continue
             # 重新登记合约
             self.symbols[vn_symbol] = pre_open_interest
 
@@ -625,12 +632,6 @@ class IndexGenerator:
             bid_price_1 = 0
             mi_tick = None
 
-            # 已经积累的行情tick数量，不足总数减1，不处理
-
-            if len(self.ticks) < min(self.n * 0.8, 3):
-                self.gateway.write_log(f'{self.underlying_symbol}合约数据{len(self.ticks)}不足{self.n} 0.8,暂不合成指数')
-                return
-
             # 计算所有合约的累加持仓量、资金、成交量、找出最大持仓量的主力合约
             for t in self.ticks.values():
                 all_interest += t.open_interest
@@ -640,6 +641,10 @@ class IndexGenerator:
                 all_bid1 += t.bid_price_1 * t.open_interest
                 if mi_tick is None or mi_tick.open_interest < t.open_interest:
                     mi_tick = t
+
+            if not (len(self.ticks) > min(self.n * 0.7, 3) or all_interest > self.pre_oi_total * 0.5):
+                self.gateway.write_log(f'{self.underlying_symbol}合约数据{len(self.ticks)}不足{self.n} 0.7，或者累计持仓数不够昨持仓0.5,暂不合成指数')
+                return
 
             # 总量 > 0
             if all_interest > 0 and all_amount > 0:

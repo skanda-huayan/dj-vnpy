@@ -165,6 +165,7 @@ class CtaLineBar(object):
         self.price_tick = 1  # 商品的最小价格单位
         self.round_n = 4  # round() 小数点的截断数量
         self.is_7x24 = False  # 是否7x24小时运行（ 一般为数字货币）
+        self.is_stock = False # 是否为股票
 
         # 当前的Tick的信息
         self.cur_tick = None  # 当前 onTick()函数接收的 最新的tick
@@ -230,6 +231,8 @@ class CtaLineBar(object):
         self.minute_interval = None  # 把各个周期的bar转换为分钟，在first_tick中，用来修正bar为整点分钟周期
         if setting:
             self.set_params(setting)
+            if self.is_stock:
+                self.is_7x24 = True
 
             # 修正self.minute_interval
             if self.interval == Interval.SECOND:
@@ -283,6 +286,7 @@ class CtaLineBar(object):
         self.param_list.append('interval')  # bar的类型
         self.param_list.append('mode')  # tick/bar模式
         self.param_list.append('is_7x24')  # 是否为7X24小时运行的bar（一般为数字货币)
+        self.param_list.append('is_stock')  # 是否为7X24小时运行的bar（一般为数字货币)
         self.param_list.append('price_tick')  # 最小跳动，用于处理指数等不一致的价格
         self.param_list.append('underly_symbol')  # 短合约，
 

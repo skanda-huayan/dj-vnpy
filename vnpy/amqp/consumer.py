@@ -5,7 +5,7 @@ import pika
 import random
 import traceback
 from vnpy.amqp.base import base_broker
-
+from vnpy.component.base import MyEncoder
 
 #   模式1：接收者
 class receiver(base_broker):
@@ -307,7 +307,7 @@ class rpc_server(base_broker):
     def reply(self, chan, reply_data, reply_to, reply_id, delivery_tag):
         """返回调用结果"""
         # data => string
-        reply_msg = json.dumps(reply_data)
+        reply_msg = json.dumps(reply_data,cls=MyEncoder)
         # 发送返回消息
         chan.basic_publish(exchange=self.exchange,
                            routing_key=reply_to,
