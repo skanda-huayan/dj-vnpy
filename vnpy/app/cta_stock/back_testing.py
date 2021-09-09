@@ -63,7 +63,7 @@ from vnpy.trader.utility import (
     get_stock_exchange
 )
 from vnpy.data.stock.adjust_factor import get_all_adjust_factor
-
+from vnpy.data.common import stock_to_adj
 from vnpy.trader.util_logger import setup_logger
 from vnpy.data.mongo.mongo_data import MongoData
 from uuid import uuid1
@@ -583,41 +583,6 @@ class BackTestingEngine(object):
                 volume_tick=symbol_data.get('min_volume', 10),
                 margin_rate=margin_rate
             )
-
-    def stock_to_adj(self, raw_data, adj_data, adj_type):
-        """
-        股票数据复权转换
-        :param raw_data: 不复权数据
-        :param adj_data:  复权记录 ( 从barstock下载的复权记录列表=》df）
-        :param adj_type: 复权类型: fore 前复权, 其他：后复权
-        :return:
-        """
-
-        if adj_type == 'fore':
-            adj_factor = adj_data["foreAdjustFactor"]
-            adj_factor = adj_factor / adj_factor.iloc[-1]  # 保证最后一个复权因子是1
-        else:
-            adj_factor = adj_data["backAdjustFactor"]
-            adj_factor = adj_factor / adj_factor.iloc[0]  # 保证第一个复权因子是1
-
-        # 把raw_data的第一个日期，插入复权因子df，使用后填充
-        if adj_factor.index[0] != raw_data.index[0]:
-            adj_factor.loc[raw_data.index[0]] = np.nan
-        adj_factor.sort_index(inplace=True)
-        adj_factor = adj_factor.ffill()
-
-        adj_factor = adj_factor.reindex(index=raw_data.index)  # 按价格dataframe的日期索引来扩展索引
-        adj_factor = adj_factor.ffill()  # 向前（向未来）填充扩展后的空单元格
-
-        # 把复权因子，作为adj字段，补充到raw_data中
-        raw_data['adj'] = adj_factor
-
-        # 逐一复权高低开平和成交量
-        for col in ['open', 'high', 'low', 'close']:
-            raw_data[col] = raw_data[col] * raw_data['adj']  # 价格乘上复权系数
-        raw_data['volume'] = raw_data['volume'] / raw_data['adj']  # 成交量除以复权系数
-
-        return raw_data
 
     def new_tick(self, tick):
         """新得tick"""

@@ -1299,7 +1299,7 @@ def check_zs_3rd(big_kline,
     direction = 1 if signal_direction == Direction.LONG else -1
 
     if not big_kline.pre_duan or not big_kline.cur_bi_zs:
-        return
+        return False
 
     # 排除，须满足：当前段的方向 == 信号方向， 当前笔的方向 != 信号方向
     if big_kline.cur_duan.direction != direction or big_kline.cur_bi.direction == direction:

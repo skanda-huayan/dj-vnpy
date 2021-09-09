@@ -283,7 +283,8 @@ class CtaTemplate(ABC):
             }
             if grid:
                 d.update({'grid': grid})
-                grid.order_ids.append(vt_orderid)
+                if len(vt_orderid) > 0:
+                    grid.order_ids.append(vt_orderid)
                 grid.order_time = order_time
             self.active_orders.update({vt_orderid: d})
         if direction == Direction.LONG:

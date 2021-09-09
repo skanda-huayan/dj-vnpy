@@ -153,14 +153,16 @@ def stock_to_adj(raw_data: pd.DataFrame,
         adj_factor = adj_data["backAdjustFactor"]
         adj_factor = adj_factor / adj_factor.iloc[0]  # 保证第一个复权因子是1
 
-    # 把raw_data的第一个日期，插入复权因子df，使用后填充
-    if adj_factor.index[0] != raw_data.index[0]:
-        adj_factor.loc[raw_data.index[0]] = np.nan
     adj_factor.sort_index(inplace=True)
-    adj_factor = adj_factor.ffill()
 
-    adj_factor = adj_factor.reindex(index=raw_data.index)  # 按价格dataframe的日期索引来扩展索引
+    # 按价格dataframe的日期索引来扩展索引
+    adj_factor2 = adj_factor.reindex(index=raw_data.index)  # 得到dataframe的日期索引
+
+    adj_factor = adj_factor2.append(adj_factor)   # 加入复权因子的日期索引
+    adj_factor = adj_factor.sort_index()
     adj_factor = adj_factor.ffill()  # 向前（向未来）填充扩展后的空单元格
+    adj_factor = adj_factor.loc[raw_data.index]  # 提取需要的日期索
+    adj_factor = adj_factor[~adj_factor.index.duplicated(keep='first')]  # 去重
 
     # 把复权因子，作为adj字段，补充到raw_data中
     raw_data['adj'] = adj_factor

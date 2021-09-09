@@ -35,7 +35,7 @@ from vnpy.trader.utility import (
     get_csv_last_dt
 )
 
-from .back_testing import BackTestingEngine
+from .back_testing import BackTestingEngine, stock_to_adj
 
 
 class PortfolioTestingEngine(BackTestingEngine):
@@ -146,7 +146,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                                                                   format="%Y-%m-%d %H:%M:%S")
                     adj_data = adj_data.set_index("dividOperateDate")
                     # 调用转换方法，对open,high,low,close, volume进行复权, fore, 前复权， 其他，后复权
-                    symbol_df = self.stock_to_adj(symbol_df, adj_data, adj_type='fore' if qfq else "")
+                    symbol_df = stock_to_adj(symbol_df, adj_data, adj_type='fore' if qfq else "")
 
                     if auto_generate_fq:
                         self.write_log(f'加载数据[{vt_symbol}] ,缓存{fq_name}文件=>{fq_bar_file}')

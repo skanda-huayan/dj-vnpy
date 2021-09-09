@@ -72,6 +72,7 @@ from vnpy.data.mongo.mongo_data import MongoData
 from vnpy.trader.setting import SETTINGS
 from vnpy.data.stock.adjust_factor import get_all_adjust_factor
 from vnpy.data.stock.stock_base import get_stock_base
+from vnpy.data.common import stock_to_adj
 from .base import (
     APP_NAME,
     EVENT_CTA_LOG,
@@ -1169,7 +1170,7 @@ class CtaEngine(BaseEngine):
                     adj_data["dividOperateDate"] = pd.to_datetime(adj_data["dividOperateDate"], format="%Y-%m-%d %H:%M:%S")
                     adj_data = adj_data.set_index("dividOperateDate")
                     # 调用转换方法，对open,high,low,close, volume进行复权, fore, 前复权， 其他，后复权
-                    symbol_df = self.stock_to_adj(symbol_df, adj_data, adj_type='fore')
+                    symbol_df = stock_to_adj(symbol_df, adj_data, adj_type='fore')
 
             for dt, bar_data in symbol_df.iterrows():
                 bar_datetime = dt #- timedelta(seconds=bar_interval_seconds)
@@ -1209,40 +1210,6 @@ class CtaEngine(BaseEngine):
 
         return bars
 
-    def stock_to_adj(self, raw_data, adj_data, adj_type):
-        """
-        股票数据复权转换
-        :param raw_data: 不复权数据
-        :param adj_data:  复权记录 ( 从barstock下载的复权记录列表=》df）
-        :param adj_type: 复权类型
-        :return:
-        """
-
-        if adj_type == 'fore':
-            adj_factor = adj_data["foreAdjustFactor"]
-            adj_factor = adj_factor / adj_factor.iloc[-1]  # 保证最后一个复权因子是1
-        else:
-            adj_factor = adj_data["backAdjustFactor"]
-            adj_factor = adj_factor / adj_factor.iloc[0]  # 保证第一个复权因子是1
-
-        # 把raw_data的第一个日期，插入复权因子df，使用后填充
-        if adj_factor.index[0] != raw_data.index[0]:
-            adj_factor.loc[raw_data.index[0]] = np.nan
-        adj_factor.sort_index(inplace=True)
-        adj_factor = adj_factor.ffill()
-
-        adj_factor = adj_factor.reindex(index=raw_data.index)  # 按价格dataframe的日期索引来扩展索引
-        adj_factor = adj_factor.ffill()  # 向前（向未来）填充扩展后的空单元格
-
-        # 把复权因子，作为adj字段，补充到raw_data中
-        raw_data['adj'] = adj_factor
-
-        # 逐一复权高低开平和成交量
-        for col in ['open', 'high', 'low', 'close']:
-            raw_data[col] = raw_data[col] * raw_data['adj']  # 价格乘上复权系数
-        raw_data['volume'] = raw_data['volume'] / raw_data['adj']  # 成交量除以复权系数
-
-        return raw_data
 
     def resample_bars(self, df, x_min=None, x_hour=None, to_day=False):
         """

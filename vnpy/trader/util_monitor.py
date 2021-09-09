@@ -96,6 +96,7 @@ class TradeMonitor(BasicMonitor):
         "tradeid": {"display": "成交号 ", "update": False},
         "orderid": {"display": "委托号", "update": False},
         "symbol": {"display": "代码", "update": False},
+        "name": {"display": "名称", "update": False},
         "exchange": {"display": "交易所", "update": False},
         "direction": {"display": "方向", "update": False},
         "offset": {"display": "开平", "update": False},
@@ -121,6 +122,7 @@ class OrderMonitor(BasicMonitor):
     headers: Dict[str, dict] = {
         "orderid": {"display": "委托号", "update": False},
         "symbol": {"display": "代码", "update": False},
+        "name": {"display": "名称", "update": False},
         "exchange": {"display": "交易所", "update": False},
         "type": {"display": "类型", "update": False},
         "direction": {"display": "方向", "update": False},
@@ -148,6 +150,7 @@ class PositionMonitor(BasicMonitor):
 
     headers = {
         "symbol": {"display": "代码", "update": False},
+        "name": {"display": "名称", "update": False},
         "exchange": {"display": "交易所", "update": False},
         "direction": {"display": "方向", "update": False},
         "volume": {"display": "数量", "update": True},

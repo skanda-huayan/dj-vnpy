@@ -6512,7 +6512,7 @@ class CtaLineBar(object):
                 'type': 'line'
             }
             indicators.update({indicator.get('name'): copy.copy(indicator)})
-        if isinstance(self.para_ema4_len, int) and self.para_ema4_len > 0:
+        if getattr(self,'para_ema4_len',0) > 0: #isinstance(self.para_ema4_len, int) and self.para_ema4_len > 0:
             indicator = {
                 'name': 'EMA{}'.format(self.para_ema4_len),
                 'attr_name': 'line_ema4',
@@ -6520,7 +6520,7 @@ class CtaLineBar(object):
                 'type': 'line'
             }
             indicators.update({indicator.get('name'): copy.copy(indicator)})
-        if isinstance(self.para_ema5_len, int) and self.para_ema5_len > 0:
+        if getattr(self, 'para_ema5_len',0) > 0: #isinstance(self.para_ema5_len, int) and self.para_ema5_len > 0:
             indicator = {
                 'name': 'EMA{}'.format(self.para_ema5_len),
                 'attr_name': 'line_ema5',
@@ -7036,8 +7036,8 @@ class CtaMinuteBar(CtaLineBar):
 
         bar_len = len(self.line_bar)
 
-        minutes_passed = (tick.datetime - datetime.strptime(tick.datetime.strftime('%Y-%m-%d'),
-                                                            '%Y-%m-%d')).total_seconds() / 60
+        minutes_passed = tick.datetime.hour * 60 + tick.datetime.minute
+
         if self.underly_symbol in MARKET_ZJ:
             if int(tick.datetime.strftime('%H%M')) > 1130 and int(tick.datetime.strftime('%H%M')) < 1600:
                 # 扣除11:30到13:00的中场休息的90分钟
