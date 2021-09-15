@@ -404,7 +404,10 @@ class RestClient(object):
         try:
             with self._get_session() as session:
                 request = self.sign(request)
-                url = self.make_full_url(request.path)
+                if request.path.startswith('http'):
+                    url = request.path
+                else:
+                    url = self.make_full_url(request.path)
 
                 # send request
                 uid = uuid.uuid4()
