@@ -1092,6 +1092,10 @@ class CtaStockTemplate(CtaTemplate):
                          symbol_tick.bid_volume_5]):
                         market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
                         market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
+                        # 乘以基本系数
+                        market_ask_volumes = market_ask_volumes * symbol_volume_tick
+                        market_bid_volumes = market_bid_volumes * symbol_volume_tick
+
                         org_sell_volume = sell_volume
                         if market_bid_volumes > 0 and market_ask_volumes > 0 and org_sell_volume >= 2 * symbol_volume_tick:
                             sell_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, sell_volume)

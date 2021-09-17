@@ -34,7 +34,7 @@ from vnpy.trader.utility import (
     extract_vt_symbol,
     get_csv_last_dt
 )
-
+from vnpy.data.common import stock_to_adj
 from .back_testing import BackTestingEngine, stock_to_adj
 
 
@@ -108,7 +108,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                 if isinstance(last_dt, datetime):
                     if last_dt.strftime('%Y-%m-%d') < self.test_end_date:
                         self.write_log(f'加载数据[{vt_symbol}], 使用{fq_name}文件:{fq_bar_file}')
-                        symbol_df = pd.read_csv(bar_file, dtype=data_types)
+                        symbol_df = pd.read_csv(fq_bar_file, dtype=data_types)
                         # 转换时间，str =》 datetime
                         symbol_df["datetime"] = pd.to_datetime(symbol_df["datetime"], format="%Y-%m-%d %H:%M:%S")
                         # 设置时间为索引
@@ -139,7 +139,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                     for row in adj_list:
                         d = row.get('dividOperateDate', "")[0:10]
                         if len(d) == 10:
-                            row.update({'dividOperateDate': d + ' 09:31:00'})
+                            row.update({'dividOperateDate': d + ' 09:30:00'})
                     # list -> dataframe, 转换复权日期格式
                     adj_data = pd.DataFrame(adj_list)
                     adj_data["dividOperateDate"] = pd.to_datetime(adj_data["dividOperateDate"],

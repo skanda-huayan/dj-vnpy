@@ -565,7 +565,7 @@ class BackTestingEngine(object):
         for vt_symbol, symbol_data in data_dict.items():
             self.write_log(u'配置{}数据:{}'.format(vt_symbol, symbol_data))
             self.set_price_tick(vt_symbol, symbol_data.get('price_tick', 0.01))
-            self.set_volume_tick(vt_symbol, symbol_data.get('min_volume', 10))
+            self.set_volume_tick(vt_symbol, symbol_data.get('min_volume', 100))
             self.set_slippage(vt_symbol, symbol_data.get('slippage', 0))
             self.set_size(vt_symbol, symbol_data.get('symbol_size', 1))
             margin_rate = symbol_data.get('margin_rate', 1)

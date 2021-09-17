@@ -402,8 +402,8 @@ class CtaEngine(BaseEngine):
         #     strategy.pos -= trade.volume
         # 根据策略名称，写入 data\straetgy_name_trade.csv文件
         strategy_name = getattr(strategy, 'strategy_name')
-        trade_fields = ['datetime', 'symbol', 'exchange', 'vt_symbol', 'tradeid', 'vt_tradeid', 'orderid', 'vt_orderid',
-                        'direction', 'offset', 'price', 'volume', 'idx_price']
+        trade_fields = ['datetime', 'symbol', 'exchange', 'vt_symbol', 'name', 'tradeid', 'vt_tradeid', 'orderid', 'vt_orderid',
+                        'direction', 'offset', 'price', 'volume']
         trade_dict = OrderedDict()
         try:
             for k in trade_fields:
@@ -417,15 +417,6 @@ class CtaEngine(BaseEngine):
                     trade_dict[k] = getattr(trade, k).value
                 else:
                     trade_dict[k] = getattr(trade, k, '')
-
-            # 添加指数价格
-            symbol = trade_dict.get('symbol')
-            idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + trade_dict.get('exchange')
-            idx_price = self.get_price(idx_symbol)
-            if idx_price:
-                trade_dict.update({'idx_price': idx_price})
-            else:
-                trade_dict.update({'idx_price': trade_dict.get('price')})
 
             if strategy_name is not None:
                 trade_file = str(get_folder_path('data').joinpath('{}_trade.csv'.format(strategy_name)))
@@ -1164,7 +1155,7 @@ class CtaEngine(BaseEngine):
                 if len(adj_list) > 0:
                     self.write_log(f'需要对{vt_symbol}进行前复权处理')
                     for row in adj_list:
-                        row.update({'dividOperateDate': row.get('dividOperateDate')[:10] + ' 09:31:00'})
+                        row.update({'dividOperateDate': row.get('dividOperateDate')[:10] + ' 09:30:00'})
                     # list -> dataframe, 转换复权日期格式
                     adj_data = pd.DataFrame(adj_list)
                     adj_data["dividOperateDate"] = pd.to_datetime(adj_data["dividOperateDate"], format="%Y-%m-%d %H:%M:%S")
