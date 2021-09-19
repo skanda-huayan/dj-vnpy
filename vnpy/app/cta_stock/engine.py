@@ -1570,15 +1570,34 @@ class CtaEngine(BaseEngine):
         else:
             self.write_log(f'策略缓存文件不存在:{cache_file}')
 
-    def get_strategy_snapshot(self, strategy_name):
-        """实时获取策略的K线切片（比较耗性能）"""
+    def get_strategy_kline_names(self, strategy_name):
+        """
+        获取策略实例内的K线名称
+        :param strategy_name:策略实例名称
+        :return:
+        """
+        info = {}
+        strategy = self.strategies.get(strategy_name, None)
+        if strategy is None:
+            return info
+        if hasattr(strategy, 'get_klines_info'):
+            info = strategy.get_klines_info()
+        return info
+
+    def get_strategy_snapshot(self, strategy_name, include_kline_names=[]):
+        """
+        实时获取策略的K线切片（比较耗性能）
+        :param strategy_name: 策略实例
+        :param include_kline_names: 指定若干kline名称
+        :return:
+        """
         strategy = self.strategies.get(strategy_name, None)
         if strategy is None:
             return None
 
         try:
-            # 5.保存策略切片
-            snapshot = strategy.get_klines_snapshot()
+            # 5.获取策略切片
+            snapshot = strategy.get_klines_snapshot(include_kline_names)
             if not snapshot:
                 self.write_log(f'{strategy_name}返回得K线切片数据为空')
                 return None

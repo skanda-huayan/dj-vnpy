@@ -290,11 +290,19 @@ class StrategyManager(QtWidgets.QFrame):
 
     def view_strategy_snapshot(self):
         """实时查看策略切片"""
-        snapshot = self.cta_engine.get_strategy_snapshot(self.strategy_name)
-        if snapshot is None:
-            return
-        ui_snapshot = UiSnapshot()
-        ui_snapshot.show(snapshot_file="", d=snapshot)
+        kline_info = self.cta_engine.get_strategy_kline_names(self.strategy_name)
+
+        selector = KlineSelectDialog(kline_info,self.strategy_name)
+        n = selector.exec_()
+
+        if n == selector.Accepted:
+            klines = selector.get_klines()
+            if len(klines) > 0:
+                snapshot = self.cta_engine.get_strategy_snapshot(self.strategy_name,klines)
+                if snapshot is None:
+                    return
+                ui_snapshot = UiSnapshot()
+                ui_snapshot.show(snapshot_file="", d=snapshot)
 
 class DataMonitor(QtWidgets.QTableWidget):
     """
@@ -396,6 +404,72 @@ class LogMonitor(BaseMonitor):
         """
         super(LogMonitor, self).insert_new_row(data)
         self.resizeRowToContents(0)
+
+class KlineSelectDialog(QtWidgets.QDialog):
+    """
+    多K线选择窗口
+    """
+    def __init__(
+        self, info: dict, strategy_name:str
+    ):
+        """
+        构造函数
+        :param info: 所有k线的配置
+        :param strategy_name:
+        """
+        super(KlineSelectDialog, self).__init__()
+
+        self.info = info
+        self.strategy_name = strategy_name
+        self.t = None
+        self.select_names = []
+
+        self.init_ui()
+
+    def init_ui(self):
+        """"""
+        form = QtWidgets.QFormLayout()
+        self.t = QtWidgets.QTableWidget(len(self.info), 2)
+
+        self.t.setHorizontalHeaderLabels(['股票', 'K线'])
+        row = 0
+        for k, v in self.info.items():
+
+            item = QtWidgets.QTableWidgetItem()
+            item.setText(k)
+            self.t.setItem(row, 0, item)
+
+            klines = QtWidgets.QTableWidgetItem()
+            klines.setText(','.join(v))
+            self.t.setItem(row,1, klines)
+            row +=1
+
+        # 单选
+        self.t.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        # self.t.cellPressed.conect(self.cell_select)
+        form.addWidget(self.t)
+        button = QtWidgets.QPushButton('确定')
+        button.clicked.connect(self.accept)
+        form.addRow(button)
+        self.setLayout(form)
+
+    def cell_select(self,row,col):
+        try:
+            content = self.t.item(row,0).text()
+            self.select_names = self.info.get(content,[])
+        except Exception as ex:
+            pass
+
+    def get_klines(self):
+        """"""
+        selectedItems = self.t.selectedItems()
+        for item in selectedItems:
+            cur_row = item.row()
+            content = item.text()
+            self.select_names = self.info.get(content, [])
+            if len(self.select_names) > 0:
+                return self.select_names
+        return self.select_names
 
 
 class SettingEditor(QtWidgets.QDialog):

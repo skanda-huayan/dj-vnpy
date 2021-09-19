@@ -7,7 +7,7 @@ from enum import Enum
 from logging import INFO, ERROR
 import json
 import numpy as np
-import datetime
+from datetime import datetime
 from vnpy.trader.constant import Direction  # noqa
 
 

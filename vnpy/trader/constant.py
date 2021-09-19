@@ -163,6 +163,7 @@ class Interval(Enum):
     HOUR = "1h"
     DAILY = "d"
     WEEKLY = "w"
+    MONTHLY = 'M'
     RENKO = 'renko'
 
 

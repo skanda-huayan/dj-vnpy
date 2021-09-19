@@ -201,7 +201,13 @@ class TdxStockData(object):
                 self.connection_status = True
 
         except Exception as ex:
-            self.write_log(u'连接服务器tdx异常:{},{}'.format(str(ex), traceback.format_exc()))
+            self.write_log(u'连接服务器{}tdx异常:{},{}'.format(self.best_ip,str(ex), traceback.format_exc()))
+            cur_ip = self.best_ip.get('ip',None)
+            if cur_ip is not None and cur_ip not in self.exclude_ips:
+                self.write_log(f'排除{cur_ip}')
+                self.exclude_ips.append(cur_ip)
+                self.best_ip = {}
+
             return
 
     def disconnect(self):

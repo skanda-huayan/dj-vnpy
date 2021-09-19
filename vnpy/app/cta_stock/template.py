@@ -575,6 +575,28 @@ class CtaStockTemplate(CtaTemplate):
             self.write_error(f'加载缓存K线数据失败:{str(ex)}')
         return None
 
+    def get_klines_info(self):
+        """
+        返回当前所有kline的信息
+        :return: {"股票中文":[kline_name1, kline_name2]}
+        """
+        info = {}
+        for kline_name in list(self.klines.keys()):
+            # 策略中如果kline不是按照 vtsymbol_xxxx 的命名方式，需要策略内部自行实现方法
+            vt_symbol = kline_name.split('_')[0]
+            # vt_symbol => 中文名
+            cn_name = self.cta_engine.get_name(vt_symbol)
+
+            # 添加到列表 => 排序
+            kline_names = info.get(cn_name, [])
+            kline_names.append(kline_name)
+            kline_names = sorted(kline_names)
+
+            # 更新
+            info[cn_name] = kline_names
+
+        return info
+
     def get_klines_snapshot(self, include_kline_names=[]):
         """
         返回当前klines的切片数据
@@ -746,6 +768,8 @@ class CtaStockTemplate(CtaTemplate):
         if trade.direction == Direction.SHORT:
             dist_record['operation'] = 'sell'
             pos.volume -= trade.volume
+
+        self.positions[trade.vt_symbol] = pos
 
         self.save_dist(dist_record)
 
@@ -1121,7 +1145,6 @@ class CtaStockTemplate(CtaTemplate):
                 continue
             else:
                 self.write_log(f'{vt_symbol} 已委托卖出，{sell_volume},委托价:{sell_price}, 数量:{sell_volume}')
-
 
     def tns_finish_sell_grid(self, grid:CtaGrid):
         """
