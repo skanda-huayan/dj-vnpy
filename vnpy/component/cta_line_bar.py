@@ -30,7 +30,7 @@ from vnpy.component.cta_period import CtaPeriod, Period
 from vnpy.trader.object import BarData, TickData
 from vnpy.trader.constant import Interval, Color, ChanSignals
 from vnpy.trader.utility import round_to, get_trading_date, get_underlying_symbol
-from vnpy.component.cta_utility import check_chan_xt,check_chan_xt_three_bi, check_qsbc_2nd
+from vnpy.component.cta_utility import check_chan_xt, check_chan_xt_three_bi, check_qsbc_2nd
 
 try:
     from vnpy.component.chanlun import ChanGraph, ChanLibrary
@@ -165,7 +165,7 @@ class CtaLineBar(object):
         self.price_tick = 1  # 商品的最小价格单位
         self.round_n = 4  # round() 小数点的截断数量
         self.is_7x24 = False  # 是否7x24小时运行（ 一般为数字货币）
-        self.is_stock = False # 是否为股票
+        self.is_stock = False  # 是否为股票
 
         # 当前的Tick的信息
         self.cur_tick = None  # 当前 onTick()函数接收的 最新的tick
@@ -209,7 +209,7 @@ class CtaLineBar(object):
         self.export_zs_filename = None  # 通过缠论的笔中枢csv文件
         self.export_duan_filename = None  # 通过缠论的线段csv文件
         self.export_xt_filename = None  # 缠论笔的形态csv文件, 满足 strategy_name_xt_n_signals.csv
-                                        # n 会转换为 3，5，7，9，11，13
+        # n 会转换为 3，5，7，9，11，13
 
         self.pre_bi_start = None  # 前一个笔的时间
         self.pre_zs_start = None  # 前一个中枢的时间
@@ -231,8 +231,7 @@ class CtaLineBar(object):
         self.minute_interval = None  # 把各个周期的bar转换为分钟，在first_tick中，用来修正bar为整点分钟周期
         if setting:
             self.set_params(setting)
-            if self.is_stock:
-                self.is_7x24 = True
+
 
             # 修正self.minute_interval
             if self.interval == Interval.SECOND:
@@ -816,7 +815,7 @@ class CtaLineBar(object):
         self.xt_9_signals = []  # czsc 九笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
         self.xt_11_signals = []  # czsc 11笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
         self.xt_13_signals = []  # czsc 13笔信号列表  {'bi_start'最后一笔开始,'bi_end'最后一笔结束,'signal'}
-        self.xt_2nd_signals = [] # 趋势背驰2买或趋势背驰2卖信号
+        self.xt_2nd_signals = []  # 趋势背驰2买或趋势背驰2卖信号
 
     def set_params(self, setting: dict = {}):
         """设置参数"""
@@ -839,9 +838,9 @@ class CtaLineBar(object):
             return
 
         # 过滤一些 异常的tick价格
-        if self.cur_price is not None and self.cur_price !=0 and tick.last_price is not None and tick.last_price != 0:
+        if self.cur_price is not None and self.cur_price != 0 and tick.last_price is not None and tick.last_price != 0:
             # 前后价格超过10%
-            if abs(tick.last_price - self.cur_price)/self.cur_price >= 0.1:
+            if abs(tick.last_price - self.cur_price) / self.cur_price >= 0.1:
                 # 是同一天,都不接受这些tick
                 if self.cur_datetime and self.cur_datetime.date == tick.datetime.date:
                     return
@@ -852,7 +851,7 @@ class CtaLineBar(object):
                 return
 
         self.cur_datetime = tick.datetime
-        self.cur_tick = tick  #copy.copy(tick)
+        self.cur_tick = tick  # copy.copy(tick)
 
         # 兼容 标准套利合约，它没有last_price
         if self.cur_tick.last_price is None or self.cur_tick.last_price == 0:
@@ -888,7 +887,7 @@ class CtaLineBar(object):
         self.cur_datetime = bar.datetime + timedelta(minutes=bar_freq)
 
         if self.bar_len == 0:
-            #new_bar = copy.deepcopy(bar)
+            # new_bar = copy.deepcopy(bar)
             self.line_bar.append(bar)
             self.cur_trading_day = bar.trading_day
             self.on_bar(bar)
@@ -934,7 +933,7 @@ class CtaLineBar(object):
 
         if is_new_bar:
             # 添加新的bar
-            #new_bar = copy.deepcopy(bar)
+            # new_bar = copy.deepcopy(bar)
             self.line_bar.append(bar)  # new_bar
             # 将上一个Bar推送至OnBar事件
             self.on_bar(lastBar)
@@ -6269,15 +6268,15 @@ class CtaLineBar(object):
                                    'signal': signal})
                 if len(xt_signals) > 200:
                     del xt_signals[0]
-                if cur_signal is not None and self.export_xt_filename :
+                if cur_signal is not None and self.export_xt_filename:
                     self.append_data(
-                        file_name=self.export_xt_filename.replace('_n_',f'_{n}_'),
+                        file_name=self.export_xt_filename.replace('_n_', f'_{n}_'),
                         dict_data=cur_signal,
                         field_names=["start", "end", "price", "signal"]
                     )
             # 直接更新
             else:
-                xt_signals[-1].update({'end': self.cur_bi.end,  'price': price,'signal': signal})
+                xt_signals[-1].update({'end': self.cur_bi.end, 'price': price, 'signal': signal})
 
         # 是否趋势二买
         qsbc_2nd = ChanSignals.Other.value
@@ -6285,16 +6284,16 @@ class CtaLineBar(object):
             if check_qsbc_2nd(big_kline=self, small_kline=None, signal_direction=Direction.LONG):
                 qsbc_2nd = ChanSignals.Q2L0.value
         else:
-            if check_qsbc_2nd(big_kline=self, small_kline=None,signal_direction=Direction.SHORT):
+            if check_qsbc_2nd(big_kline=self, small_kline=None, signal_direction=Direction.SHORT):
                 qsbc_2nd = ChanSignals.Q2S0.value
         cur_signal = self.xt_2nd_signals[-1] if len(self.xt_2nd_signals) > 0 else None
         # 不同笔开始时间
         if cur_signal is None or cur_signal.get("start", "") != self.cur_bi.start:
             # 新增
             self.xt_2nd_signals.append({'start': self.cur_bi.start,
-                               'end': self.cur_bi.end,
-                               'price': price,
-                               'signal': qsbc_2nd})
+                                        'end': self.cur_bi.end,
+                                        'price': price,
+                                        'signal': qsbc_2nd})
             if cur_signal and self.export_xt_filename:
                 self.append_data(
                     file_name=self.export_xt_filename.replace('_n_', f'_2nd_'),
@@ -6304,8 +6303,6 @@ class CtaLineBar(object):
         # 直接更新
         else:
             self.xt_2nd_signals[-1].update({'end': self.cur_bi.end, 'price': price, 'signal': qsbc_2nd})
-
-
 
     def write_log(self, content):
         """记录CTA日志"""
@@ -6512,7 +6509,7 @@ class CtaLineBar(object):
                 'type': 'line'
             }
             indicators.update({indicator.get('name'): copy.copy(indicator)})
-        if getattr(self,'para_ema4_len',0) > 0: #isinstance(self.para_ema4_len, int) and self.para_ema4_len > 0:
+        if getattr(self, 'para_ema4_len', 0) > 0:  # isinstance(self.para_ema4_len, int) and self.para_ema4_len > 0:
             indicator = {
                 'name': 'EMA{}'.format(self.para_ema4_len),
                 'attr_name': 'line_ema4',
@@ -6520,7 +6517,7 @@ class CtaLineBar(object):
                 'type': 'line'
             }
             indicators.update({indicator.get('name'): copy.copy(indicator)})
-        if getattr(self, 'para_ema5_len',0) > 0: #isinstance(self.para_ema5_len, int) and self.para_ema5_len > 0:
+        if getattr(self, 'para_ema5_len', 0) > 0:  # isinstance(self.para_ema5_len, int) and self.para_ema5_len > 0:
             indicator = {
                 'name': 'EMA{}'.format(self.para_ema5_len),
                 'attr_name': 'line_ema5',
@@ -6936,7 +6933,7 @@ class CtaMinuteBar(CtaLineBar):
 
     def add_bar(self, bar, bar_is_completed=False, bar_freq=1):
         """
-        予以外部初始化程序增加bar
+        CtaMinuteBar予以外部初始化程序增加bar
         :param bar:
         :param bar_is_completed: 插入的bar，其周期与K线周期一致，就设为True
          :param bar_freq, bar对象得frequency
@@ -6975,9 +6972,12 @@ class CtaMinuteBar(CtaLineBar):
         if bar_is_completed:
             is_new_bar = True
 
-        minutes_passed = (bar.datetime - datetime.strptime(bar.datetime.strftime('%Y-%m-%d'),
-                                                           '%Y-%m-%d')).total_seconds() / 60
-        if self.underly_symbol in MARKET_ZJ:
+        if self.cur_trading_day > bar.trading_day:
+            is_new_bar = True
+
+        minutes_passed = bar.datetime.hour * 60 + bar.datetime.minute
+
+        if self.underly_symbol in MARKET_ZJ or self.is_stock:
             if int(bar.datetime.strftime('%H%M')) > 1130 and int(bar.datetime.strftime('%H%M')) < 1600:
                 # 扣除11:30到13:00的中场休息的90分钟
                 minutes_passed = minutes_passed - 90
@@ -6988,10 +6988,11 @@ class CtaMinuteBar(CtaLineBar):
             elif int(bar.datetime.strftime('%H%M')) > 1130 and int(bar.datetime.strftime('%H%M')) < 1600:
                 # 扣除(10:15到10:30的中场休息的15分钟)&(11:30到13:30的中场休息的120分钟)
                 minutes_passed = minutes_passed - 135
+
         bars_passed = int(minutes_passed / self.bar_interval)
 
         # 不在同一交易日，推入新bar
-        if self.cur_trading_day != bar.trading_day:
+        if self.cur_trading_day > bar.trading_day:
             is_new_bar = True
             self.cur_trading_day = bar.trading_day
             self.bars_count = bars_passed
@@ -7005,12 +7006,8 @@ class CtaMinuteBar(CtaLineBar):
                 # self.write_log("addBar(): {}, bars_count={}".format(bar.datetime.strftime("%Y%m%d %H:%M:%S"),
                 #                                                      self.bars_count))
 
-        # 数字货币，如果bar的前后距离，超过周期，重新开启一个新的bar
-        if self.is_7x24 and (bar.datetime - lastBar.datetime).total_seconds() >= 60 * self.bar_interval:
-            is_new_bar = True
-
         if is_new_bar:
-            #new_bar = copy.deepcopy(bar)
+            # new_bar = copy.deepcopy(bar)
             # 添加新的bar
             self.line_bar.append(bar)  # new_bar
             # 将上一个Bar推送至OnBar事件
@@ -7038,17 +7035,18 @@ class CtaMinuteBar(CtaLineBar):
 
         minutes_passed = tick.datetime.hour * 60 + tick.datetime.minute
 
-        if self.underly_symbol in MARKET_ZJ:
+        if self.is_stock or self.underly_symbol in MARKET_ZJ:
             if int(tick.datetime.strftime('%H%M')) > 1130 and int(tick.datetime.strftime('%H%M')) < 1600:
                 # 扣除11:30到13:00的中场休息的90分钟
                 minutes_passed = minutes_passed - 90
-        else:
+        elif not self.is_7x24:
             if int(tick.datetime.strftime('%H%M')) > 1015 and int(tick.datetime.strftime('%H%M')) <= 1130:
                 # 扣除10:15到10:30的中场休息的15分钟
                 minutes_passed = minutes_passed - 15
             elif int(tick.datetime.strftime('%H%M')) > 1130 and int(tick.datetime.strftime('%H%M')) < 1600:
                 # 扣除(10:15到10:30的中场休息的15分钟)&(11:30到13:30的中场休息的120分钟)
                 minutes_passed = minutes_passed - 135
+
         bars_passed = int(minutes_passed / self.bar_interval)
 
         # 保存第一个K线数据
@@ -7451,8 +7449,8 @@ class CtaDayBar(CtaLineBar):
         bar_len = len(self.line_bar)
 
         if bar_len == 0:
-            #new_bar = copy.deepcopy(bar)
-            self.line_bar.append(bar) # new_bar
+            # new_bar = copy.deepcopy(bar)
+            self.line_bar.append(bar)  # new_bar
             self.cur_trading_day = bar.trading_day if bar.trading_day is not None else get_trading_date(bar.datetime)
             if bar_is_completed:
                 self.on_bar(bar)
@@ -7478,8 +7476,8 @@ class CtaDayBar(CtaLineBar):
 
         if is_new_bar:
             # 添加新的bar
-            #new_bar = copy.deepcopy(bar)
-            self.line_bar.append(bar) # new_bar
+            # new_bar = copy.deepcopy(bar)
+            self.line_bar.append(bar)  # new_bar
             # 将上一个Bar推送至OnBar事件
             self.on_bar(lastBar)
         else:

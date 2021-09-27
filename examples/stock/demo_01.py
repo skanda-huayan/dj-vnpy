@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     # 获取某个合约得的分时数据,周期是15分钟，返回数据类型是barData
     print('加载数据')
-    bars, msg = get_stock_bars(vt_symbol=vt_symbol, freq=bar_freq)
+    bars, msg = get_stock_bars(vt_symbol=vt_symbol, freq=bar_freq,start_date='2021-03-01')
 
     # 创建一个15分钟bar的 kline对象
     setting = {}

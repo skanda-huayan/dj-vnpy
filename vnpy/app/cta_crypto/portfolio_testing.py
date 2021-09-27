@@ -222,7 +222,10 @@ class PortfolioTestingEngine(BackTestingEngine):
                     bar.low_time = bar_data.get('low_time', None)  # 最后一次进入低位区域的时间
                     bar.high_time = bar_data.get('high_time', None)  # 最后一次进入高位区域的时间
                 else:
-                    bar_datetime = dt - timedelta(seconds=self.bar_interval_seconds)
+                    # 如果数据源是bar时间end标识得，需要扣减bar得时间
+                    # bar_datetime = dt - timedelta(seconds=self.bar_interval_seconds)
+                    # 如果数据源是bar时间start标识，就不需要扣减bar时间
+                    bar_datetime = dt
 
                     bar = BarData(
                         gateway_name='backtesting',

@@ -1482,6 +1482,8 @@ class KLineWidget(KeyWraper):
         :param sub_indicators:  副图的indicator list
         :return:
         """
+        print(f'start plot kline data')
+        t1 = datetime.now()
         # 设置中心点时间
         self.index = 0
         # 绑定数据，更新横坐标映射，更新Y轴自适应函数，更新十字光标映射
@@ -1515,7 +1517,9 @@ class KLineWidget(KeyWraper):
         # 调用画图函数
         self.plot_all(redraw=True, xMin=0, xMax=len(self.datas))
         self.crosshair.signal.emit((None, None))
-        print('finished load Data')
+        t2 = datetime.now()
+        s = (t2-t1).microseconds
+        print(f'finished plot kline data in {s} ms')
 
 
 class GridKline(QtWidgets.QWidget):
@@ -1662,8 +1666,14 @@ class GridKline(QtWidgets.QWidget):
                     data_file = kline_setting.get('data_file', None)
                     if not data_file:
                         continue
+                    print(f'loading {data_file}')
+                    t1 = datetime.now()
                     df = pd.read_csv(data_file)
                     df = df.set_index(pd.DatetimeIndex(df['datetime']))
+                    t2 = datetime.now()
+                    s = (t2 - t1).microseconds
+                    print(f'finished load in {s} ms')
+
                 canvas.loadData(df,
                                 main_indicators=kline_setting.get('main_indicators', []),
                                 sub_indicators=kline_setting.get('sub_indicators', [])
@@ -1673,19 +1683,31 @@ class GridKline(QtWidgets.QWidget):
                 trade_list_file = kline_setting.get('trade_list_file', None)
                 if trade_list_file and os.path.exists(trade_list_file):
                     print(f'loading {trade_list_file}')
+                    t1 = datetime.now()
                     df_trade_list = pd.read_csv(trade_list_file)
                     self.kline_dict[kline_name].add_signals(df_trade_list)
+                    t2 = datetime.now()
+                    s = (t2-t1).microseconds
+                    print(f'finished load in {s} ms')
 
                 # 记载交易信号（实盘产生的）
                 trade_file = kline_setting.get('trade_file', None)
                 if trade_file and os.path.exists(trade_file):
                     print(f'loading {trade_file}')
+                    t1 = datetime.now()
                     df_trade = pd.read_csv(trade_file)
+                    t2 = datetime.now()
+                    s = (t2 - t1).microseconds
+                    print(f'finished load in {s} ms')
 
+                    t1 = datetime.now()
                     self.kline_dict[kline_name].add_trades(
                         df_trades=df_trade,
                         include_symbols=kline_setting.get('trade_include_symbols', []),
                         exclude_symbols=kline_setting.get('trade_excclude_symbols', []))
+                    t2 = datetime.now()
+                    s = (t2 - t1).microseconds
+                    print(f'finished plot trade in {s} ms')
 
                 # 加载tns( 回测、实盘产生的）
                 tns_file = kline_setting.get('tns_file', None)

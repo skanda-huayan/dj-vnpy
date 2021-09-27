@@ -11,7 +11,7 @@ from abc import ABC
 from copy import copy,deepcopy
 from typing import Any, Callable, List, Dict
 from logging import INFO, ERROR
-from datetime import datetime
+from datetime import datetime,timedelta
 from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Exchange, Color
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData, PositionData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol, round_to
@@ -740,6 +740,25 @@ class CtaStockTemplate(CtaTemplate):
         else:
             if dt:
                 self.policy.cur_trading_date = dt.strftime('%Y-%m-%d')
+
+
+    def check_adjust(self, vt_symbol):
+        """
+        检查股票的最新除权时间，是否在一周内
+        :param vt_symbol:
+        :return: True: 一周内没有发生除权； False：一周内发生过除权
+        """
+        last_adjust_factor = self.cta_engine.get_adjust_factor(vt_symbol)
+        if last_adjust_factor is None:
+            return True
+        last_adjust_date = last_adjust_factor.get('dividOperateDate', None)
+        # 最后在除权出息日，发生在一周内
+        if last_adjust_date and (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d') <= last_adjust_date:
+            self.write_log(
+                '{}[{}]发生除权除息，日期:{}'.format(vt_symbol, last_adjust_factor.get('name'), last_adjust_date))
+            return False
+
+        return True
 
     def after_trading(self):
         """收盘后调用一次"""
