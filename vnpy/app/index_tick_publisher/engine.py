@@ -71,6 +71,7 @@ class IndexTickPublisherV2(BaseEngine):
         self.subscribed_symbols = set()  # 已订阅合约代码
         self.ticks = {}
 
+        self.dt = datetime.now()
         # 本地/vnpy/data/tdx/future_contracts.json
         self.all_contracts = get_future_contracts()
         # 需要订阅的短合约
@@ -108,12 +109,12 @@ class IndexTickPublisherV2(BaseEngine):
 
     def process_timer_event(self, event):
         """定时执行"""
-        dt = datetime.now()
+        self.dt = datetime.now()
 
-        if self.last_minute and dt.minute == self.last_minute:
+        if self.last_minute and self.dt.minute == self.last_minute:
             return
 
-        self.last_minute = dt.minute
+        self.last_minute = self.dt.minute
 
         self.check_status()
 
@@ -208,6 +209,11 @@ class IndexTickPublisherV2(BaseEngine):
 
     def on_tick(self, tick):
         """ tick到达事件"""
+
+        # 排除tick时间与当前时间不一致tick
+        if abs((tick.datetime - self.dt).total_seconds()) > 20:
+            return
+
         short_symbol = get_underlying_symbol(tick.symbol).upper()
         # 更新tick
         tick_dict = self.ticks.get(short_symbol, None)
@@ -269,7 +275,7 @@ class IndexTickPublisherV2(BaseEngine):
                     # 更新未指数的持仓量、交易量，最后价格，ask1，bid1
                     d.update({'open_interest': all_interest, 'volume': all_volume,
                               'last_price': last_price, 'ask_price_1': ask_price_1, 'bid_price_1': bid_price_1})
-                    print('{} {}:{}'.format(d.get('datetime'), d.get("vt_symbol"), d.get('last_price')))
+                    #print('{} {}:{}'.format(d.get('datetime'), d.get("vt_symbol"), d.get('last_price')))
                     d = json.dumps(d)
                     self.pub.pub(d)
 
