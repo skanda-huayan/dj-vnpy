@@ -350,7 +350,7 @@ def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_l
     if not os.path.exists(file_name):
         return False
 
-    with open(file_name, 'r') as f:
+    with open(file_name, 'r', encoding='utf8') as f:
         f_size = os.path.getsize(file_name)
         if f_size < line_length:
             line_length = f_size

@@ -92,7 +92,7 @@ class MainEngine:
             # 缺省使用了接口自己定义的gateway_name
             gateway = gateway_class(self.event_engine)
             gateway_name = gateway.gateway_name
-
+        self.write_log(f'添加{gateway_name}网关')
         self.gateways[gateway_name] = gateway
 
         # Add gateway supported exchanges into engine

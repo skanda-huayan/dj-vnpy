@@ -367,10 +367,10 @@ class BackTestingEngine(object):
         self.volume_tick.update({vt_symbol: volume_tick})
 
     def get_volume_tick(self, vt_symbol: str):
-        return self.volume_tick.get(vt_symbol, 1)
+        return self.volume_tick.get(vt_symbol, 100)
 
     def set_contract(self, symbol: str, exchange: Exchange, product: Product, name: str, size: int,
-                     price_tick: float, volume_tick: float = 1, margin_rate: float = 0.1):
+                     price_tick: float, volume_tick: float = 100, margin_rate: float = 0.1):
         """设置合约信息"""
         vt_symbol = '.'.join([symbol, exchange.value])
         if vt_symbol not in self.contract_dict:
@@ -580,7 +580,7 @@ class BackTestingEngine(object):
                 product=Product(symbol_data.get('product', "股票")),
                 size=symbol_data.get('symbol_size', 1),
                 price_tick=symbol_data.get('price_tick', 0.01),
-                volume_tick=symbol_data.get('min_volume', 10),
+                volume_tick=symbol_data.get('min_volume', 100),
                 margin_rate=margin_rate
             )
 

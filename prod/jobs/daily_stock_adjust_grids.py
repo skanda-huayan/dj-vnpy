@@ -110,9 +110,21 @@ if __name__ == "__main__":
                 # 更新数量
                 grid['volume'] = adj_volume
 
+                # 更新开仓\平仓\止损价格
+                open_price = grid['open_price']
+                new_open_price = round(float(open_price * adj_rate), 3)
+                close_price = grid['close_price']
+                new_close_price = round(float(close_price * adj_rate), 3)
+                stop_price = grid['stop_price']
+                new_stop_price = round(float(stop_price * adj_rate), 3)
+
                 # 更新执行日期
                 grid['snapshot'].update({'adjusted_date': dividOperateDate})
-                msg = f'{strategy_name}:{vt_symbol}[{name}]发生除权调整:{cur_volume}=>{adj_volume}'
+                msg = f'{strategy_name}:{vt_symbol}[{name}]发生除权调整:持仓{cur_volume}=>{adj_volume},' \
+                    f'开仓价:{open_price}=>{new_open_price},' \
+                    f'平仓价:{close_price}=>{new_close_price},' \
+                    f'止损价:{stop_price}=>{new_stop_price}'
+
                 send_wx_msg(msg)
                 print(msg)
                 append_data(adj_record_file, dict_data={
@@ -126,8 +138,8 @@ if __name__ == "__main__":
                     'pre_back_adj': pre_data.get('backAdjustFactor'),
                     'last_back_adj': last_data.get('backAdjustFactor')
                 })
-                changed = True
 
+                changed = True
 
         if changed:
             print('保存更新后的Grids.json文件')

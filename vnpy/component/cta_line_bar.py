@@ -6240,13 +6240,14 @@ class CtaLineBar(object):
         if bi_len < 3:
             return
 
-        if self.cur_fenxing.is_rt:
-            return
+        # if self.cur_fenxing.is_rt:
+        #     return
 
         bi_n = min(15, bi_len)
 
         price = self.cur_bi.low if self.cur_bi.direction == -1 else self.cur_bi.high
 
+        # 计算 3，5，7，，，，13笔的形态
         for n in range(3, bi_n, 2):
             # => 信号
             if n == 3:
@@ -6294,7 +6295,7 @@ class CtaLineBar(object):
                                         'end': self.cur_bi.end,
                                         'price': price,
                                         'signal': qsbc_2nd})
-            if cur_signal and self.export_xt_filename:
+            if cur_signal is not None and self.export_xt_filename:
                 self.append_data(
                     file_name=self.export_xt_filename.replace('_n_', f'_2nd_'),
                     dict_data=cur_signal,
@@ -6303,6 +6304,23 @@ class CtaLineBar(object):
         # 直接更新
         else:
             self.xt_2nd_signals[-1].update({'end': self.cur_bi.end, 'price': price, 'signal': qsbc_2nd})
+
+    def get_xt_signal(self, xt_name, x=0):
+        """
+        获取n笔形态/信号的倒x笔结果
+        :param n:
+        :param x: 倒x笔，如倒1笔
+        :return: {}
+        """
+        xt_signals = getattr(self, xt_name)
+        if xt_signals is None:
+            return {}
+
+        if len(xt_signals) > x:
+            return xt_signals[-1-x]
+        else:
+            return {}
+
 
     def write_log(self, content):
         """记录CTA日志"""

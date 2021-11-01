@@ -107,7 +107,7 @@ def refill(symbol_info):
         data_df = data_df.sort_index()
         # print(data_df.head())
         print(data_df.tail())
-        data_df.to_csv(bar_file_path, index=True)
+        data_df.to_csv(bar_file_path, index=True, encoding='utf8')
         d2 = datetime.now()
         microseconds = (d1 - d1).microseconds
         print(f'{progress}% 首次更新{stock_code} {stock_name}数据 {microseconds} 毫秒=> 文件{bar_file_path}')
@@ -176,8 +176,11 @@ if __name__ == '__main__':
         for symbol in symbol_dict.keys():
             info = copy(symbol_dict[symbol])
             stock_code = info['code']
-            if ('stock_type' in info.keys() and info['stock_type'] in ['stock_cn',
-                                                                       'cb_cn']) or stock_code in stock_list:
+
+            # 股票/可转债； 或 存在指定下载文件中
+            if ('stock_type' in info.keys() \
+                and info['stock_type'] in ['stock_cn', 'cb_cn']) \
+                    or stock_code in stock_list:
                 info['period'] = period
                 tasks.append(info)
                 # if len(tasks) > 12:

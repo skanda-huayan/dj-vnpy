@@ -16,6 +16,8 @@ import pickle
 import bz2
 import traceback
 import pandas as pd
+import random
+from time import sleep
 
 from datetime import datetime, timedelta
 from logging import ERROR
@@ -94,8 +96,8 @@ class TdxStockData(object):
         self.config = get_cache_config(TDX_STOCK_CONFIG)
         self.symbol_dict = self.config.get('symbol_dict', {})
         self.cache_time = self.config.get('cache_time', datetime.now() - timedelta(days=7))
-        self.best_ip = self.config.get('best_ip',{})
-        self.exclude_ips = self.config.get('exclude_ips',[])
+        self.best_ip = self.config.get('best_ip', {})
+        self.exclude_ips = self.config.get('exclude_ips', [])
 
         if len(self.symbol_dict) == 0 or self.cache_time < datetime.now() - timedelta(days=1):
             self.cache_config()
@@ -201,8 +203,8 @@ class TdxStockData(object):
                 self.connection_status = True
 
         except Exception as ex:
-            self.write_log(u'连接服务器{}tdx异常:{},{}'.format(self.best_ip,str(ex), traceback.format_exc()))
-            cur_ip = self.best_ip.get('ip',None)
+            self.write_log(u'连接服务器{}tdx异常:{},{}'.format(self.best_ip, str(ex), traceback.format_exc()))
+            cur_ip = self.best_ip.get('ip', None)
             if cur_ip is not None and cur_ip not in self.exclude_ips:
                 self.write_log(f'排除{cur_ip}')
                 self.exclude_ips.append(cur_ip)
@@ -320,7 +322,7 @@ class TdxStockData(object):
 
         self.write_log('{}开始下载tdx股票: {},代码:{} {}数据, {} to {}.'
                        .format(datetime.now(), name, tdx_code, tdx_period, qry_start_date, qry_end_date))
-        stock_type = get_stock_type(tdx_code,market_id)
+        stock_type = get_stock_type(tdx_code, market_id)
         if stock_type == 'index_cn':
             get_bar_func = self.api.get_index_bars
         else:
@@ -349,6 +351,7 @@ class TdxStockData(object):
             if len(_bars) == 0:
                 self.write_error('{} Handling {}, len1={}..., continue'.format(
                     str(datetime.now()), tdx_code, len(_bars)))
+                sleep(3 * random.random())
                 return False, ret_bars
 
             current_datetime = datetime.now()

@@ -16,7 +16,7 @@ from datetime import datetime
 import pandas as pd
 import traceback
 
-from vnpy.component.cta_line_bar import CtaHourBar
+from vnpy.component.cta_line_bar import CtaMinuteBar, CtaHourBar, CtaDayBar, CtaLineBar, get_cta_bar_type
 from vnpy.component.cta_renko_bar import CtaRenkoBar
 from vnpy.trader.object import BarData, TickData
 from vnpy.trader.utility import get_folder_path, get_trading_date
@@ -60,9 +60,12 @@ class FundKline(object):
             self.write_log(u'使用CtaRenkoBar')
             self.kline = CtaRenkoBar(strategy=self, cb_on_bar=self.on_bar, setting=self.setting)
         else:
-            self.write_log(u'使用CtaHourBar')
-            self.kline = CtaHourBar(strategy=self, cb_on_bar=self.on_bar, setting=self.setting)
-        # self.kline = CtaDayBar(strategy=self, onBarFunc=self.onBar, setting=self.setting)
+            kline_setting = self.setting
+            kline_period = kline_setting.pop('kline_period', 'H1')  # 默认使用1小时K线
+            kline_class, kline_bar_interval = get_cta_bar_type(kline_period)
+            self.write_log(u'使用{}'.format(kline_period))
+            kline_setting['bar_interval'] = kline_bar_interval  # X分钟K线, X秒K线，X小时K线
+            self.kline = kline_class(strategy=self, cb_on_bar=self.on_bar, setting=kline_setting)
         self.inited = False
 
         self.long_pos_dict = {}

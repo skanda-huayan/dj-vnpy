@@ -46,6 +46,7 @@ class Request(object):
         params: dict,
         data: Union[dict, str, bytes],
         headers: dict,
+        cookies: Union[requests.cookies.RequestsCookieJar, dict]=None,
         callback: CALLBACK_TYPE = None,
         on_failed: ON_FAILED_TYPE = None,
         on_error: ON_ERROR_TYPE = None,
@@ -61,7 +62,7 @@ class Request(object):
         self.params = params
         self.data = data
         self.headers = headers
-
+        self.cookies = cookies
         self.stream = stream
         self.on_connected = on_connected
         self.processing_line: Optional[str] = ''
@@ -258,6 +259,7 @@ class RestClient(object):
         params: dict = None,
         data: Union[dict, str, bytes] = None,
         headers: dict = None,
+        cookies:  Union[requests.cookies.RequestsCookieJar, dict]=None,
         on_failed: ON_FAILED_TYPE = None,
         on_error: ON_ERROR_TYPE = None,
         extra: Any = None,
@@ -281,6 +283,7 @@ class RestClient(object):
             params=params,
             data=data,
             headers=headers,
+            cookies=cookies,
             callback=callback,
             on_failed=on_failed,
             on_error=on_error,
@@ -416,6 +419,7 @@ class RestClient(object):
                 headers = request.headers
                 params = request.params
                 data = request.data
+                cookies = request.cookies
                 self._log("[%s] sending request %s %s, headers:%s, params:%s, data:%s",
                           uid, method, url,
                           headers, params, data)
@@ -425,6 +429,7 @@ class RestClient(object):
                     headers=headers,
                     params=params,
                     data=data,
+                    cookies=cookies,
                     proxies=self.proxies,
                     stream=stream,
                 )
@@ -498,6 +503,7 @@ class RestClient(object):
         params: dict = None,
         data: dict = None,
         headers: dict = None,
+        cookies:  Union[requests.cookies.RequestsCookieJar, dict]=None
     ):
         """
         Add a new request.
@@ -514,6 +520,7 @@ class RestClient(object):
             params,
             data,
             headers,
+            cookies=cookies,
             client=self,
         )
         request = self.sign(request)
@@ -526,6 +533,7 @@ class RestClient(object):
             headers=request.headers,
             params=request.params,
             data=request.data,
-            proxies=self.proxies,
+            cookies=request.cookies,
+            proxies=self.proxies
         )
         return response

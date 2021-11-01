@@ -1563,9 +1563,12 @@ class GridKline(QtWidgets.QWidget):
 
     # 配置项12: bi_file / duan_file / bi_zs_file / duan_zs_file，支持缠论的画线
 
-    def __init__(self, parent=None, kline_settings={}, title='', relocate=True):
+    def __init__(self, parent=None, kline_settings={}, title='', relocate=True,screen_file=""):
         self.parent = parent
         super(GridKline, self).__init__(parent)
+        self.width = 1920
+        self.height = 1080
+
         # widget的标题
         if title:
             self.setWindowTitle(title)
@@ -1590,6 +1593,9 @@ class GridKline(QtWidgets.QWidget):
         self.setLayout(self.grid_layout)
 
         self.relocate = relocate
+
+        self.screen_file = screen_file
+
         self.init_ui()
 
     def init_ui(self):
@@ -1598,13 +1604,14 @@ class GridKline(QtWidgets.QWidget):
         id = 1
 
         for kline_name, kline_setting in self.kline_settings.items():
-            canvas = getattr(self, f'canvas_{id}')
+            canvas = getattr(self, f'canvas_{id}',None)
             if id > 8:
                 print(f'最多支持8个K线同时展现', file=sys.stderr)
                 continue
-
-            # 创建K线图表
-            canvas = KLineWidget(display_vol=False, display_sub=True)
+            if canvas is None:
+                # 创建K线图表
+                canvas = KLineWidget(display_vol=False, display_sub=True)
+                setattr(self, f'canvas_{id}', canvas)
             canvas.show()
             # K线标题
             canvas.KLtitle.setText(f'{kline_name}', size='18pt')
@@ -1644,10 +1651,15 @@ class GridKline(QtWidgets.QWidget):
                 if len(kline_names) == 0:
                     break
             row += 1
-
-        self.show()
+        if len(self.screen_file) == 0:
+            self.show()
 
         self.load_multi_kline()
+
+        if len(self.screen_file) > 0:
+            p = self.grab()
+            p.save(self.screen_file,'png')
+            self.close()
 
     # ----------------------------------------------------------------------
     def load_multi_kline(self):

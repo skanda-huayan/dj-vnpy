@@ -10,8 +10,9 @@ import ctypes
 import bz2
 import pickle
 import zlib
+from time import sleep
 import pandas as pd
-
+from pyqtgraph import QtGui
 from vnpy.trader.ui.kline.crosshair import Crosshair
 from vnpy.trader.ui.kline.kline import *
 
@@ -29,7 +30,8 @@ class UiSnapshot(object):
              tns_file: str = "",
              dist_file: str = "",
              dist_include_list=[],
-             use_grid=True):
+             use_grid=True,
+             export_file=""):
         """
         显示切片
         :param snapshot_file: 切片文件路径（通过这个方法，可读取历史切片）
@@ -119,14 +121,38 @@ class UiSnapshot(object):
                     k: setting
                 }
             )
-        # K线界面
-        try:
-            if use_grid:
-                w = GridKline(kline_settings=kline_settings, title=d.get('strategy', ''), relocate=True)
-                w.showMaximized()
-            else:
-                w = MultiKlineWindow(kline_settings=kline_settings, title=d.get('strategy', ''))
-                w.showMaximized()
 
+        try:
+            if len(export_file) == 0:
+                # K线界面
+                if use_grid:
+                    w = GridKline(kline_settings=kline_settings, title=d.get('strategy', ''), relocate=True)
+                    w.showMaximized()
+                else:
+                    w = MultiKlineWindow(kline_settings=kline_settings, title=d.get('strategy', ''))
+                    w.showMaximized()
+            else:
+                w = GridKline(kline_settings=kline_settings, title=d.get('strategy',''),relocate=False,screen_file=export_file)
+                print('sleep')
+                sleep(1)
+                print('close')
+                w.close()
         except Exception as ex:
             print(u'exception:{},trace:{}'.format(str(ex), traceback.format_exc()))
+
+    def export(self,
+               snapshot_file: str,
+               d: dict = None,
+               trade_file: str = "",
+               tns_file: str = "",
+               dist_file: str = "",
+               dist_include_list=[],
+               export_file:str=""
+               ):
+
+        self.show(snapshot_file=snapshot_file,
+                  d=d,
+                  trade_file=trade_file,
+                  dist_file=dist_file,
+                  dist_include_list=dist_include_list,
+                  export_file=export_file)

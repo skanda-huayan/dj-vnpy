@@ -1825,7 +1825,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                         self.write_log(u'撤单逻辑 => 重新开仓')
                         # 开空委托单
                         if order_info['direction'] == Direction.SHORT:
-                            short_price = self.cur_mi_price - self.price_tick
+                            cur_price = self.cta_engine.get_price(order_vt_symbol)
+                            short_price = cur_price - self.price_tick
                             if order_grid.volume != order_volume and order_volume > 0:
                                 self.write_log(
                                     u'网格volume:{},order_volume:{}不一致，修正'.format(order_grid.volume, order_volume))
@@ -1845,7 +1846,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                             else:
                                 self.write_error(u'撤单后，重新委托开空仓失败')
                         else:
-                            buy_price = self.cur_mi_price + self.price_tick
+                            cur_price = self.cta_engine.get_price(order_vt_symbol)
+                            buy_price = cur_price + self.price_tick
                             if order_grid.volume != order_volume and order_volume > 0:
                                 self.write_log(
                                     u'网格volume:{},order_volume:{}不一致，修正'.format(order_grid.volume, order_volume))
