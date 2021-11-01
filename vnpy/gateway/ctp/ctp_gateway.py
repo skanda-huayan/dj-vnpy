@@ -2312,9 +2312,10 @@ class TqMdApi():
         """"""
         try:
             if self.api:
-                self.api.close()
                 self.is_connected = False
                 if self.update_thread:
                     self.update_thread.join()
+                self.api.close()
+
         except Exception as e:
             self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)),on_log=True)
