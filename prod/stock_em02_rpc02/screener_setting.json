@@ -1,0 +1,24 @@
+{
+    "stock_screener_ThreeBuy_D1_SSE": {
+        "class_name": "StrategyChanlunThreeBuy",
+        "auto_init": true,
+        "auto_start": true,
+        "setting": {
+            "vt_symbols": [],
+            "all_stocks": true,
+             "exchange": "SSE",
+            "bar_name": "D1"
+        }
+    },
+    "stock_screener_ThreeBuy_D1_SZSE": {
+        "class_name": "StrategyChanlunThreeBuy",
+        "auto_init": true,
+        "auto_start": true,
+        "setting": {
+            "vt_symbols": [],
+            "all_stocks": true,
+            "exchange": "SZSE",
+            "bar_name": "D1"
+        }
+    }
+}

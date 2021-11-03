@@ -1,0 +1,15 @@
+{
+  "mongo_db":
+      {
+        "host": "192.168.1.214",
+        "port": 27017
+      },
+  "accounts":
+      {
+        "em02_gw":
+        {
+          "copy_history_trades": true,
+          "copy_history_orders": true
+        }
+      }
+}

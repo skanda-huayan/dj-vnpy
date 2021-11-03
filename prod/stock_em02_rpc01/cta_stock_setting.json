@@ -1,0 +1,21 @@
+{
+    "stock_grids_etf": {
+        "class_name": "StrategyStockGridTradeV3",
+        "vt_symbols": [
+            "159995.SZSE"
+        ],
+        "auto_init": true,
+        "auto_start": true,
+        "setting": {
+            "backtesting": false,
+            "comments": [
+                "芯片ETF"
+            ],
+            "max_invest_percent": 10,
+            "max_invest_margin": 100000,
+            "max_single_margin": 2000,
+            "grid_height_percent": 4,
+            "grid_lots": 15
+        }
+    }
+}

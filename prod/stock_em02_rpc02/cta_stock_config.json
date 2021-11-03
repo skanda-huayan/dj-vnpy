@@ -1,0 +1,6 @@
+{
+   "accountid" : "540330215539[普通]",
+   "strategy_group": "cta_stock_02",
+    "get_pos_from_db": true,
+   "compare_pos": true
+}

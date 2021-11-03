@@ -1,0 +1,23 @@
+{
+    "stock_three_buy_d1": {
+        "class_name": "StrategyStock3rdBuyGroupV1",
+        "vt_symbols": [],
+        "auto_init": true,
+        "auto_start": true,
+        "setting": {
+            "comment": "日线三买",
+            "backtesting": false,
+            "max_invest_rate": 0.5,
+            "max_single_margin": 20000,
+            "stock_name_filters": [
+                "st",
+                "退",
+                "地产"
+            ],
+            "screener_strategies": [
+                "stock_screener_ThreeBuy_D1_SZSE",
+                "stock_screener_ThreeBuy_D1_SSE"
+            ]
+        }
+    }
+}
