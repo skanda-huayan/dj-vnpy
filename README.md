@@ -10,6 +10,20 @@ github 链接： https://github.com/msincenselee/vnpy
 gitee  链接： https://gitee.com/vnpy2/vnpy
 
 ###Fork版本主要改进如下
+17、东财股票接入
+
+    - vnpy.api.eastmoney_api,
+        + 自动登录
+        
+    - vnpy.gateway.eastmoney
+        + 普通账号、信用账号、期权账号
+        
+    - vnpy.data.eastmoney 
+        + 下载网页版数据
+       
+    - prod.stock_em02_gw + prod.stock_em02_rpc01 + prod.stock_em02_rpc02
+       分布式引擎脚本示例
+       
 16、EasyTrade股票接入（国金证券）
 
     - vnpy.api.easytrader, 
@@ -139,7 +153,10 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
 大佳
 QQ/Wechat：28888502
 
-2020最新套利课程：http://www.uquant.org/course/43
+2021 股票CTA实战课程：http://www.uquant.org/course/49
+2021 期货缠论高级课程：http://www.uquant.org/course/48
+2021 数字货币CTA课程：http://www.uquant.org/course/46
+2020 期货套利课程：http://www.uquant.org/course/43
 
 --------------------------------------------------------------------------------------------
 #  原版 vn.py - 基于python的开源交易平台开发框架
