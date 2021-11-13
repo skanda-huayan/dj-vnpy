@@ -1,4 +1,6 @@
-""""""
+# 股票模板
+# 华富资产 @ 李来佳
+
 import os
 import sys
 import uuid
@@ -38,7 +40,7 @@ class CtaTemplate(ABC):
             self,
             cta_engine: Any,
             strategy_name: str,
-            vt_symbols: List[str],
+            vt_symbols: str,
             setting: dict,
     ):
         """"""
@@ -204,6 +206,9 @@ class CtaTemplate(ABC):
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.LONG,
                                offset=Offset.OPEN,
@@ -224,6 +229,9 @@ class CtaTemplate(ABC):
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK sell委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.SHORT,
                                offset=Offset.CLOSE,
@@ -253,6 +261,7 @@ class CtaTemplate(ABC):
            return []
 
         if not self.trading:
+            self.write_log(f'非交易状态')
             return []
 
         vt_orderids = self.cta_engine.send_order(

@@ -132,7 +132,7 @@ def download_adjust_factor():
 if __name__ == '__main__':
 
     # 下载所有复权数据
-    # download_adjust_factor()
+    download_adjust_factor()
 
     # 下载某个股票的复权数据
     # f = get_adjust_factor(vt_symbol='000651.SZSE',stock_name='格力电器',need_login=True)

@@ -1,0 +1,14 @@
+{
+    "stock_screener_ThreeBuy_D1": {
+        "class_name": "StrategyChanlunThreeBuy",
+        "auto_init": true,
+        "auto_start": true,
+        "setting": {
+            "vt_symbols": [
+                "600410.SSE"
+            ],
+            "all_stocks": false,
+            "bar_name": "D1"
+        }
+    }
+}

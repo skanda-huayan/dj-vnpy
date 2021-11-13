@@ -70,7 +70,8 @@ INIT_TDX_MARKET_MAP = {
     'CJL9': 28, 'CYL9': 28, 'FGL9': 28, 'JRL9': 28, 'LRL9': 28, 'MAL9': 28,
     'OIL9': 28, 'PML9': 28, 'RIL9': 28, 'RML9': 28, 'RSL9': 28, 'SFL9': 28,
     'SML9': 28, 'SRL9': 28, 'TAL9': 28, 'ICL9': 47, 'IFL9': 47, 'IHL9': 47,
-    'TFL9': 47, 'TL9': 47, 'TSL9': 47, 'SAL9': 28, 'PGL9': 29, 'PFL9': 28, 'LH':29}
+    'TFL9': 47, 'TL9': 47, 'TSL9': 47, 'SAL9': 28, 'PGL9': 29, 'PFL9': 28,
+    'LHL9':29,'LUL9':30}
 # 常量
 QSIZE = 500
 ALL_MARKET_BEGIN_HOUR = 8

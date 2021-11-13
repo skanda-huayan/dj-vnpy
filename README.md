@@ -10,6 +10,14 @@ github 链接： https://github.com/msincenselee/vnpy
 gitee  链接： https://gitee.com/vnpy2/vnpy
 
 ###Fork版本主要改进如下
+
+18、CTA股票选股引擎
+
+    -vnpy.app.stock_screener
+        + 无界面选股引擎
+    -prod.screener_d1
+        + 每日执行一次选股所有选股策略脚本
+        
 17、东财股票接入
 
     - vnpy.api.eastmoney_api,
@@ -153,10 +161,15 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
 大佳
 QQ/Wechat：28888502
 
-2021 股票CTA实战课程：http://www.uquant.org/course/49
-2021 期货缠论高级课程：http://www.uquant.org/course/48
-2021 数字货币CTA课程：http://www.uquant.org/course/46
-2020 期货套利课程：http://www.uquant.org/course/43
+系列在线课程
+
+    2021 股票CTA实战课程：http://www.uquant.org/course/49
+
+    2021 期货缠论高级课程：http://www.uquant.org/course/48
+
+    2021 数字货币CTA课程：http://www.uquant.org/course/46
+
+    2020 期货套利课程：http://www.uquant.org/course/43
 
 --------------------------------------------------------------------------------------------
 #  原版 vn.py - 基于python的开源交易平台开发框架

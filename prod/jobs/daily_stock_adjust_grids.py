@@ -29,7 +29,7 @@ if VNPY_ROOT not in sys.path:
 
 os.environ["VNPY_TESTING"] = "1"
 from vnpy.trader.utility import load_json, save_json, append_data
-from vnpy.data.stock.adjust_factor import get_adjust_factor, get_stock_base
+from vnpy.data.stock.adjust_factor import download_adjust_factor, get_adjust_factor, get_stock_base
 from vnpy.trader.util_wechat import send_wx_msg
 
 if __name__ == "__main__":
@@ -37,6 +37,9 @@ if __name__ == "__main__":
     if len(sys.argv) <= 1:
         print(u'请输入:{}目录下的子目录作为参数1'.format(os.path.abspath(os.path.join(VNPY_ROOT, 'prod'))))
         exit()
+
+    print('下载更新所有复权因子')
+    download_adjust_factor()
 
     # 进行报告的账号目录
     account_folder = sys.argv[1]

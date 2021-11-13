@@ -1274,38 +1274,47 @@ class CtaEngine(BaseEngine):
         """
         Add a new strategy.
         """
-        if strategy_name in self.strategies:
-            msg = f"创建策略失败，存在重名{strategy_name}"
-            self.write_log(msg=msg,
-                           level=logging.CRITICAL)
-            return False, msg
+        try:
+            if strategy_name in self.strategies:
+                msg = f"创建策略失败，存在重名{strategy_name}"
+                self.write_log(msg=msg,
+                               level=logging.CRITICAL)
+                return False, msg
 
-        strategy_class = self.classes.get(class_name, None)
-        if not strategy_class:
-            msg = f"创建策略失败，找不到策略类{class_name}"
-            self.write_log(msg=msg,
-                           level=logging.CRITICAL)
-            return False, msg
+            strategy_class = self.classes.get(class_name, None)
+            if not strategy_class:
+                msg = f"创建策略失败，找不到策略类{class_name}"
+                self.write_log(msg=msg,
+                               level=logging.CRITICAL)
+                return False, msg
 
-        self.write_log(f'开始添加策略类{class_name}，实例名:{strategy_name}')
-        strategy = strategy_class(self, strategy_name, vt_symbols, setting)
-        self.strategies[strategy_name] = strategy
+            self.write_log(f'开始添加策略类{class_name}，实例名:{strategy_name}')
+            strategy = strategy_class(self, strategy_name, vt_symbols, setting)
+            self.strategies[strategy_name] = strategy
 
-        # Add vt_symbol to strategy map.
-        subscribe_symbol_set = self.strategy_symbol_map[strategy_name]
-        for vt_symbol in vt_symbols:
-            strategies = self.symbol_strategy_map[vt_symbol]
-            strategies.append(strategy)
-            subscribe_symbol_set.add(vt_symbol)
+            # Add vt_symbol to strategy map.
+            subscribe_symbol_set = self.strategy_symbol_map[strategy_name]
+            for vt_symbol in vt_symbols:
+                strategies = self.symbol_strategy_map[vt_symbol]
+                strategies.append(strategy)
+                subscribe_symbol_set.add(vt_symbol)
 
-        # Update to setting file.
-        self.update_strategy_setting(strategy_name, setting, auto_init, auto_start)
+            # Update to setting file.
+            self.update_strategy_setting(strategy_name, setting, auto_init, auto_start)
 
-        self.put_strategy_event(strategy)
+            self.put_strategy_event(strategy)
 
-        # 判断设置中是否由自动初始化和自动启动项目
-        if auto_init:
-            self.init_strategy(strategy_name, auto_start=auto_start)
+            # 判断设置中是否由自动初始化和自动启动项目
+            if auto_init:
+                self.init_strategy(strategy_name, auto_start=auto_start)
+
+        except Exception as ex:
+            msg = f'添加策略实例{strategy_name}失败,{str(ex)}'
+            self.write_error(msg)
+            self.write_error(traceback.format_exc())
+            self.send_wechat(msg)
+
+            return False, f'添加策略实例{strategy_name}失败'
 
         return True, f'成功添加{strategy_name}'
 
@@ -1497,15 +1506,19 @@ class CtaEngine(BaseEngine):
         if module_name:
             new_class_name = module_name + '.' + class_name
             self.write_log(u'转换策略为全路径:{}'.format(new_class_name))
-
+            old_strategy_class = self.classes[class_name]
+            self.write_log(f'旧策略ID:{id(old_strategy_class)}')
             strategy_class = import_module_by_str(new_class_name)
             if strategy_class is None:
-                err_msg = u'加载策略模块失败:{}'.format(class_name)
+                err_msg = u'加载策略模块失败:{}'.format(new_class_name)
                 self.write_error(err_msg)
                 return False, err_msg
 
             self.write_log(f'重新加载模块成功，使用新模块:{new_class_name}')
+            self.write_log(f'新策略ID:{id(strategy_class)}')
             self.classes[class_name] = strategy_class
+        else:
+            self.write_log(f'没有{class_name}的module_name,无法重新加载模块')
 
         # 停止当前策略实例的运行，撤单
         self.stop_strategy(strategy_name)
