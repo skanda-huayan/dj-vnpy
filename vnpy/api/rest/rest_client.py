@@ -524,8 +524,10 @@ class RestClient(object):
             client=self,
         )
         request = self.sign(request)
-
-        url = self.make_full_url(request.path)
+        if request.path.startswith('http'):
+            url = request.path
+        else:
+            url = self.make_full_url(request.path)
 
         response = requests.request(
             request.method,

@@ -333,7 +333,7 @@ class ContractData(BaseData):
     net_position: bool = False  # whether gateway uses net position volume
     history_data: bool = False  # whether gateway provides bar history data
 
-    option_strike: float = 0
+    option_strike: float = 0  # 行权价
     option_underlying: str = ""  # vt_symbol of underlying contract
     option_type: OptionType = None
     option_expiry: datetime = None

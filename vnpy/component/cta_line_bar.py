@@ -6965,7 +6965,7 @@ class CtaMinuteBar(CtaLineBar):
 
         # 更新最后价格
         self.cur_price = bar.close_price
-        self.cur_datetime = bar.datetime
+        self.cur_datetime = bar.datetime + timedelta(minutes=bar_freq)
 
         bar_len = len(self.line_bar)
 

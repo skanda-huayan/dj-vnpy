@@ -1101,21 +1101,23 @@ class CtaStockTemplate(CtaTemplate):
             acc_symbol_pos = self.cta_engine.get_position(
                 vt_symbol=ordering_grid.vt_symbol,
                 direction=Direction.NET)
-            if acc_symbol_pos is None:
-                self.write_error(f'{self.strategy_name}当前{ordering_grid.vt_symbol}持仓查询不到, 无法执行卖出')
-                continue
 
             vt_symbol = ordering_grid.vt_symbol
+            cn_name = self.cta_engine.get_name(ordering_grid.vt_symbol)
             sell_volume = ordering_grid.volume - ordering_grid.traded_volume
+
+            if acc_symbol_pos is None:
+                self.write_error(f'{self.strategy_name}当前{vt_symbol}[{cn_name}]持仓查询不到, 无法执行卖出[{sell_volume}]')
+                continue
 
             if sell_volume > acc_symbol_pos.volume:
                 if not force:
-                    self.write_error(u'账号{}持仓{},不满足减仓目标:{}'
-                                       .format(vt_symbol, acc_symbol_pos.volume, sell_volume))
+                    self.write_error(u'账号{}[{}]持仓{},不满足减仓目标:{}'
+                                       .format(vt_symbol,cn_name, acc_symbol_pos.volume, sell_volume))
                     continue
                 else:
-                    self.write_log(u'账号{}持仓{},不满足减仓目标:{}, 修正卖出数量:{}=>{}'
-                                   .format(vt_symbol, acc_symbol_pos.volume, sell_volume, sell_volume,
+                    self.write_log(u'账号{}[{}]持仓{},不满足减仓目标:{}, 修正卖出数量:{}=>{}'
+                                   .format(vt_symbol,cn_name, acc_symbol_pos.volume, sell_volume, sell_volume,
                                            acc_symbol_pos.volume))
                     sell_volume = acc_symbol_pos.volume
 

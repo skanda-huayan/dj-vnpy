@@ -31,7 +31,9 @@ class UiSnapshot(object):
              dist_file: str = "",
              dist_include_list=[],
              use_grid=True,
-             export_file=""):
+             export_file="",
+             kline_filters=[],
+             symbol_filters=[]):
         """
         显示切片
         :param snapshot_file: 切片文件路径（通过这个方法，可读取历史切片）
@@ -40,6 +42,9 @@ class UiSnapshot(object):
         :param dist_file: 格式化策略逻辑日志文件
         :param dist_include_list: 逻辑日志中，operation字段内需要过滤显示的内容
         :param use_grid: 使用同一窗口
+        :param export_file: 界面生成图片得文件
+        :param kline_filters: 缺省为空，即全部K线，如果约定只显示得K线，则在里面放入过滤条件，满足过滤条件得即可通过
+        :param symbol_filters: 交易记录数据过滤，缺省为空不过滤。根据交易记录里面得symbol进行过滤。一般用于单策略，多合约交易时过滤交易记录
         :return:
         """
         if d is None:
@@ -60,6 +65,12 @@ class UiSnapshot(object):
 
         kline_settings = {}
         for k, v in klines.items():
+
+            # 如果存在k线名称过滤
+            if len(kline_filters) > 0:
+                if not any([name in k for name in kline_filters]):
+                    continue
+
             # 获取bar各种数据/指标列表
             data_list = v.pop('data_list', None)
             if data_list is None:
@@ -83,6 +94,10 @@ class UiSnapshot(object):
             # 加载本地data目录的交易记录
             if len(trade_file) > 0 and os.path.exists(trade_file):
                 setting.update({"trade_file": trade_file})
+
+                # 交易合约过滤
+                if len(symbol_filters) > 0:
+                    setting.update({'trade_symbol_filters': symbol_filters})
 
             # 加载本地data目录的事务
             if len(tns_file) > 0 and os.path.exists(tns_file):

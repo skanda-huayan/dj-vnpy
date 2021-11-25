@@ -1536,6 +1536,9 @@ class GridKline(QtWidgets.QWidget):
     # 配置项3：sub_indicators， 副图指标
     #       指标变量必须在data_file文件中存在字段
 
+    # 配置项目: trade_symbol_filters,交易记录过滤，缺省[]时不执行过滤
+    # 根据交易记录中得symbol字段内容进行过滤，满足过滤条件得交易记录才使用。
+
     # 配置项4：trade_list_file，开平仓交易记录
     #       每条记录包含开仓，平仓，收益信息
     #       回测时，每个策略实例，都产生trade_list.csv文件
@@ -1690,6 +1693,8 @@ class GridKline(QtWidgets.QWidget):
                                 main_indicators=kline_setting.get('main_indicators', []),
                                 sub_indicators=kline_setting.get('sub_indicators', [])
                                 )
+                # 交易记录过滤
+                trade_symbol_filters = kline_setting.get('trade_symbol_filters', [])
 
                 # 加载开、平仓的交易信号（一般是回测系统产生的）
                 trade_list_file = kline_setting.get('trade_list_file', None)
@@ -1697,6 +1702,11 @@ class GridKline(QtWidgets.QWidget):
                     print(f'loading {trade_list_file}')
                     t1 = datetime.now()
                     df_trade_list = pd.read_csv(trade_list_file)
+
+                    # 如果需要过滤记录，过滤vt_symbol这个字段
+                    if len(trade_symbol_filters) > 0 and 'vt_symbol' in df_trade_list.columns:
+                        df_trade_list = df_trade_list[df_trade_list.vt_symbol.str.contains("|".join(trade_symbol_filters)).any(level=0)]
+
                     self.kline_dict[kline_name].add_signals(df_trade_list)
                     t2 = datetime.now()
                     s = (t2-t1).microseconds
@@ -1708,6 +1718,10 @@ class GridKline(QtWidgets.QWidget):
                     print(f'loading {trade_file}')
                     t1 = datetime.now()
                     df_trade = pd.read_csv(trade_file)
+                    # 如果需要过滤记录，过滤vt_symbol这个字段
+                    if len(trade_symbol_filters)> 0 and 'vt_symbol' in df_trade.columns:
+                        df_trade = df_trade[df_trade.vt_symbol.str.contains("|".join(trade_symbol_filters)).any(level=0)]
+
                     t2 = datetime.now()
                     s = (t2 - t1).microseconds
                     print(f'finished load in {s} ms')

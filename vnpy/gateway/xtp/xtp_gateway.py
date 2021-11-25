@@ -70,7 +70,8 @@ POSITION_DIRECTION_XTP2VT = {
 # 委托单类型
 ORDERTYPE_XTP2VT: Dict[int, OrderType] = {
     1: OrderType.LIMIT,
-    2: OrderType.MARKET
+    2: OrderType.MARKET,
+    4: OrderType.MARKET
 }
 ORDERTYPE_VT2XTP: Dict[OrderType, int] = {v: k for k, v in ORDERTYPE_XTP2VT.items()}
 
@@ -550,7 +551,7 @@ class XtpTdApi(TdApi):
             exchange=MARKET_XTP2VT[data["market"]],
             orderid=str(data["order_xtp_id"]),
             sys_orderid=str(data["order_xtp_id"]),
-            type=ORDERTYPE_XTP2VT[data["price_type"]],
+            type=ORDERTYPE_XTP2VT.get(data["price_type"], OrderType.LIMIT),
             direction=direction,
             offset=offset,
             price=data["price"],

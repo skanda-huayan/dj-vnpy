@@ -337,7 +337,8 @@ def get_digits(value: float) -> int:
 
 def print_dict(d: dict):
     """返回dict的字符串类型"""
-    return '\n'.join([f'{key}:{d[key]}' for key in sorted(d.keys())])
+    max_key_len = max([len(str(k)) for k in d.keys()])
+    return '\n'.join([str(key) + (max_key_len-len(str(key))) * " " + f': {d[key]}' for key in sorted(d.keys())])
 
 
 def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_length=1000):
