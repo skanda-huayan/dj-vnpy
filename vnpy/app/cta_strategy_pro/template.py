@@ -871,7 +871,9 @@ class CtaProTemplate(CtaTemplate):
             for g in self.gt.get_opened_grids(direction=Direction.LONG):
                 vt_symbol = g.snapshot.get('mi_symbol', g.vt_symbol if g.vt_symbol and '99' not in g.vt_symbol else self.vt_symbol)
                 open_price = g.snapshot.get('open_price', g.open_price)
+                name = self.cta_engine.get_name(vt_symbol)
                 pos_list.append({'vt_symbol': vt_symbol,
+                                 'name':name,
                                  'direction': 'long',
                                  'volume': g.volume - g.traded_volume,
                                  'price': open_price})
@@ -880,7 +882,9 @@ class CtaProTemplate(CtaTemplate):
             for g in self.gt.get_opened_grids(direction=Direction.SHORT):
                 vt_symbol = g.snapshot.get('mi_symbol',  g.vt_symbol if g.vt_symbol and '99' not in g.vt_symbol else self.vt_symbol)
                 open_price = g.snapshot.get('open_price', g.open_price)
+                name = self.cta_engine.get_name(vt_symbol)
                 pos_list.append({'vt_symbol': vt_symbol,
+                                 'name': name,
                                  'direction': 'short',
                                  'volume': abs(g.volume - g.traded_volume),
                                  'price': open_price})
@@ -1787,7 +1791,7 @@ class CtaProFutureTemplate(CtaProTemplate):
             # order_price = order_info['price']
             # order_direction = order_info['direction']
             # order_offset = order_info['offset']
-            order_grid = order_info['grid']
+            order_grid = order_info.get('grid',None)
             order_status = order_info.get('status', Status.NOTTRADED)
             order_type = order_info.get('order_type', OrderType.LIMIT)
             over_seconds = (dt - order_time).total_seconds()
@@ -1827,7 +1831,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                         if order_info['direction'] == Direction.SHORT:
                             cur_price = self.cta_engine.get_price(order_vt_symbol)
                             short_price = cur_price - self.price_tick
-                            if order_grid.volume != order_volume and order_volume > 0:
+                            if order_grid and order_grid.volume != order_volume and order_volume > 0:
                                 self.write_log(
                                     u'网格volume:{},order_volume:{}不一致，修正'.format(order_grid.volume, order_volume))
                                 order_grid.volume = order_volume
@@ -1842,13 +1846,14 @@ class CtaProFutureTemplate(CtaProTemplate):
 
                             if len(vt_orderids) > 0:
                                 self.write_log(u'委托成功，orderid:{}'.format(vt_orderids))
-                                order_grid.snapshot.update({'open_price': short_price})
+                                if order_grid:
+                                    order_grid.snapshot.update({'open_price': short_price})
                             else:
                                 self.write_error(u'撤单后，重新委托开空仓失败')
                         else:
                             cur_price = self.cta_engine.get_price(order_vt_symbol)
                             buy_price = cur_price + self.price_tick
-                            if order_grid.volume != order_volume and order_volume > 0:
+                            if order_grid and order_grid.volume != order_volume and order_volume > 0:
                                 self.write_log(
                                     u'网格volume:{},order_volume:{}不一致，修正'.format(order_grid.volume, order_volume))
                                 order_grid.volume = order_volume
@@ -1863,7 +1868,8 @@ class CtaProFutureTemplate(CtaProTemplate):
 
                             if len(vt_orderids) > 0:
                                 self.write_log(u'委托成功，orderids:{}'.format(vt_orderids))
-                                order_grid.snapshot.update({'open_price': buy_price})
+                                if order_grid:
+                                    order_grid.snapshot.update({'open_price': buy_price})
                             else:
                                 self.write_error(u'撤单后，重新委托开多仓失败')
                     else:

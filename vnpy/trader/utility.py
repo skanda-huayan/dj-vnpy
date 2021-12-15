@@ -337,7 +337,7 @@ def get_digits(value: float) -> int:
 
 def print_dict(d: dict):
     """返回dict的字符串类型"""
-    max_key_len = max([len(str(k)) for k in d.keys()])
+    max_key_len = max([len(str(k)) for k in d.keys()]) if len(d.keys()) > 0 else 10
     return '\n'.join([str(key) + (max_key_len-len(str(key))) * " " + f': {d[key]}' for key in sorted(d.keys())])
 
 

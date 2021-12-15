@@ -194,7 +194,7 @@ class CtaTemplate(ABC):
             pos = PositionData(
                 gateway_name=contract.gateway_name if contract else '',
                 symbol=symbol,
-                name=contract.name,
+                name=contract.name if contract else symbol,
                 exchange=exchange,
                 direction=direction
             )
@@ -405,14 +405,15 @@ class CtaTemplate(ABC):
             return []
 
         vt_orderids = self.cta_engine.send_order(
-            strategy=self,
+            strategy_name=self.strategy_name,
             vt_symbol=vt_symbol,
             direction=direction,
             offset=offset,
             price=price,
             volume=volume,
             stop=stop,
-            order_type=order_type
+            order_type=order_type,
+            internal=True
         )
         if len(vt_orderids) == 0:
             self.write_error(f'{self.strategy_name}调用cta_engine.send_order委托返回失败,vt_symbol:{vt_symbol}')
@@ -452,7 +453,7 @@ class CtaTemplate(ABC):
         Cancel an existing order.
         """
         if self.trading:
-            return self.cta_engine.cancel_order(self, vt_orderid)
+            return self.cta_engine.cancel_order(self.strategy_name, vt_orderid)
 
         return False
 
@@ -461,7 +462,7 @@ class CtaTemplate(ABC):
         Cancel all orders sent by strategy.
         """
         if self.trading:
-            self.cta_engine.cancel_all(self)
+            self.cta_engine.cancel_all(self.strategy_name)
 
     def is_upper_limit(self, symbol):
         """是否涨停"""
@@ -539,7 +540,11 @@ class CtaTemplate(ABC):
             self.cta_engine.sync_strategy_data(self)
 
 class CtaOptionTemplate(CtaTemplate):
-    """期权交易增强版模板"""
+    """
+    期权交易增强版模板
+    使用target_pos得方式，开平仓时，只需要更新self.policy.target_pos{}
+
+    """
 
 
     # 逻辑过程日志
@@ -594,7 +599,6 @@ class CtaOptionTemplate(CtaTemplate):
             return
 
         self.write_log('当前policy:\n{}'.format(print_dict(self.policy.to_json())))
-
 
     def sync_data(self):
         """同步更新数据"""

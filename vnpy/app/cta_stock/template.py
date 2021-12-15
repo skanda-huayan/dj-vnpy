@@ -1078,6 +1078,8 @@ class CtaStockTemplate(CtaTemplate):
 
         ordering_grid = None
         for grid in self.gt.dn_grids:
+            cn_name = self.cta_engine.get_name(grid.vt_symbol)
+
             # 只扫描vt_symbol 匹配的网格
             if vt_symbol and vt_symbol != grid.vt_symbol:
                 continue
@@ -1088,10 +1090,15 @@ class CtaStockTemplate(CtaTemplate):
 
             # 排除存在委托单号的网格
             if len(grid.order_ids) > 0:
+                self.write_log(f'网格{grid.vt_symbol}[{cn_name}]存在委托单号:{grid.order_ids}')
                 continue
 
             if grid.volume <= grid.traded_volume:
-                self.write_log(u'网格计划卖出:{}，已成交:{}'.format(grid.volume, grid.traded_volume))
+                self.write_log(u'{}[{}]网格计划卖出:{}，已成交:{}'.format(
+                    grid.vt_symbol,
+                    cn_name,
+                    grid.volume,
+                    grid.traded_volume))
                 self.tns_finish_sell_grid(grid)
                 continue
 
@@ -1103,7 +1110,7 @@ class CtaStockTemplate(CtaTemplate):
                 direction=Direction.NET)
 
             vt_symbol = ordering_grid.vt_symbol
-            cn_name = self.cta_engine.get_name(ordering_grid.vt_symbol)
+
             sell_volume = ordering_grid.volume - ordering_grid.traded_volume
 
             if acc_symbol_pos is None:
@@ -1122,11 +1129,12 @@ class CtaStockTemplate(CtaTemplate):
                     sell_volume = acc_symbol_pos.volume
 
             if sell_volume == 0:
-                self.write_log(f'账号{vt_symbol}持仓{acc_symbol_pos.volume},卖出目标:{sell_volume}=0 不执行')
+                self.write_log(f'账号{vt_symbol}[{cn_name}]持仓{acc_symbol_pos.volume},卖出目标:{sell_volume}=0 不执行')
                 continue
 
             cur_price = self.cta_engine.get_price(vt_symbol)
             if not cur_price:
+                self.write_log(f'获取不到{vt_symbol}[{cn_name}]价格，发出订阅')
                 self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
                 continue
 

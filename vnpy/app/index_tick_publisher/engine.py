@@ -132,6 +132,8 @@ class IndexTickPublisherV2(BaseEngine):
             if len(self.selected_underly_symbols) > 0 and underly_symbol not in self.selected_underly_symbols:
                 continue
 
+            self.write_log(f'定时检查{underly_symbol}')
+
             # 日盘数据，夜盘期间不订阅
             if dt_now.hour < 4 or dt_now.hour > 20:
                 if underly_symbol in MARKET_DAY_ONLY:
@@ -139,12 +141,17 @@ class IndexTickPublisherV2(BaseEngine):
 
             # 获取当前所有的合约列表
             symbols = info.get('symbols', {})
+
+            total_oi = 0
+            if len(symbols) > 0:
+                total_oi = sum([v for v in symbols.values()])
+
             # 获取交易所
             exchange = info.get('exchange', 'LOCAL')
             # 获取本地记录的tick dict
             tick_dict = self.ticks.get(underly_symbol, {})
 
-            for symbol in symbols.keys():
+            for symbol in list(symbols.keys()):
                 # 全路径合约 => 标准合约 ,如 ZC2109 => ZC109, RB2110 => rb2110
                 vn_symbol = get_real_symbol_by_exchange(symbol, Exchange(exchange))
 
@@ -152,6 +159,14 @@ class IndexTickPublisherV2(BaseEngine):
                     self.write_log(f'移除早于当月的合约{symbol}')
                     symbols.pop(symbol, None)
                     continue
+
+                cur_oi = symbols.get(symbol,0)
+
+                if cur_oi < max(total_oi * 0.03,100):
+                    self.write_log(f'{symbol} 上一交易日持仓量:{cur_oi} 小于合约总持仓量{total_oi}得3% {max(total_oi * 0.03,100)},不纳入指数计算范围')
+                    symbols.pop(symbol, None)
+                    continue
+
                 # 生成带交易所信息的合约
                 vt_symbol = f'{vn_symbol}.{exchange}'
                 # symbol_exchange_map是全局变量，ctp md api会使用到，所以需要更新其 合约与交易所的关系
