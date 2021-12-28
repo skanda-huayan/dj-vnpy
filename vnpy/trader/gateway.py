@@ -32,7 +32,8 @@ from .object import (
     CancelRequest,
     SubscribeRequest,
     HistoryRequest,
-    Exchange
+    Exchange,
+    Status
 )
 
 from vnpy.trader.utility import get_folder_path, round_to, get_underlying_symbol, get_real_symbol_by_exchange
@@ -103,6 +104,8 @@ class BaseGateway(ABC):
 
         self.query_functions = []
 
+        self.rejected_orders = {}  # 当日被拒单得订单， vt_symbol_direction_offset:[orders]
+
     def create_logger(self):
         """
         创建engine独有的日志
@@ -155,6 +158,13 @@ class BaseGateway(ABC):
         Order event push.
         Order event of a specific vt_orderid is also pushed.
         """
+        # 如果是拒单，进行登记
+        if order.status == Status.REJECTED:
+            k = f'{order.vt_symbol}_{order.direction.value}_{order.offset.value}'
+            orders = self.rejected_orders.get(k,[])
+            orders.append(deepcopy(order))
+            self.rejected_orders.update({k:orders})
+
         self.on_event(EVENT_ORDER, order)
         # self.on_event(EVENT_ORDER + order.vt_orderid, order)
 
@@ -782,6 +792,8 @@ class LocalOrderManager:
         Keep an order buf before pushing it to gateway.
         """
         self.orders[order.orderid] = copy(order)
+
+
         self.gateway.on_order(order)
 
     def cancel_order(self, req: CancelRequest) -> None:

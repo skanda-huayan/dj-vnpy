@@ -226,7 +226,7 @@ class CtaEngine(BaseEngine):
 
         # 触发每个策略的定时接口
         for strategy in list(self.strategies.values()):
-            strategy.on_timer()
+            self.call_strategy_func(strategy, strategy.on_timer)
             if not strategy.trading:
                 all_trading = False
 

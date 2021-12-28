@@ -415,7 +415,7 @@ class BackTestingEngine(object):
 
     @lru_cache()
     def get_slippage(self, vt_symbol: str):
-        """获取滑点"""
+        """获取滑点点数"""
         return self.slippage.get(vt_symbol, 0)
 
     def set_size(self, vt_symbol: str, size: int):

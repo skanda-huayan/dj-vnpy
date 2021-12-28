@@ -93,12 +93,12 @@ class CtaLineBar(object):
     lineMSetting = {}
     lineMSetting['name'] = u'M1'
     lineMSetting['interval'] = Interval.MINUTE
-    lineMSetting['bar_interval'] = 60    # 1分钟对应60秒
+    lineMSetting['bar_interval'] = 1        # 1分钟对应60秒
     lineMSetting['para_ema1_len'] = 7        # EMA线1的周期
     lineMSetting['para_ema2_len'] = 21       # EMA线2的周期
     lineMSetting['para_boll_len'] = 20       # 布林特线周期
     lineMSetting['para_boll_std_rate'] = 2    # 布林特线标准差
-    lineMSetting['price_tick'] = self.price_tick  # 最小条
+    lineMSetting['price_tick'] = self.price_tick  # 最小跳
     lineMSetting['underlying_symbol'] = self.underlying_symbol  #商品短号
     self.lineM = CtaLineBar(self, self.onBar, lineMSetting)
 
@@ -5876,6 +5876,47 @@ class CtaLineBar(object):
 
         return False
 
+    def is_duan_divergence(self, direction, user_macd=False):
+        """
+        判断 两个线段是否背驰
+        :param direction: 1，-1 或者 Direction.LONG（判断是否顶背离）, Direction.SHORT（判断是否底背离）
+        :param user_macd:
+        :return:
+        """
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        if self.tre_duan is None:
+            return False
+
+        # 获取对比的两个线段
+        if self.cur_duan.direction == direction:
+            cur_duan = self.cur_duan
+            tre_duan = self.tre_duan
+        else:
+            if len(self.duan_list) < 4:
+                return False
+            cur_duan = self.duan_list[-2]
+            tre_duan = self.duan_list[-4]
+
+        # 判断dif值是否背驰
+        is_dif_div = False
+        if user_macd:
+            cur_dif = self.get_dif_by_dt(cur_duan.end)
+            tre_dif = self.get_dif_by_dt(tre_duan.end)
+            if (cur_dif > tre_dif and direction == -1) or (cur_dif < tre_dif and direction == 1):
+                is_dif_div = True
+        else:
+            is_dif_div = True
+
+        # 判断 高度，斜率，dif值
+        if cur_duan.height <= tre_duan.height and cur_duan.atan < tre_duan.atan and is_dif_div:
+            if (cur_duan.low < tre_duan.low and cur_duan.high < tre_duan.high and direction == -1) \
+                    or (cur_duan.high > tre_duan.high and cur_duan.low > tre_duan.high and direction == 1):
+                return True
+
+        return False
+
     def is_fx_macd_divergence(self, direction, cur_duan=None, use_macd=False):
         """
         分型的macd背离
@@ -6267,7 +6308,7 @@ class CtaLineBar(object):
                                    'end': self.cur_bi.end,
                                    'price': price,
                                    'signal': signal})
-                if len(xt_signals) > 200:
+                if len(xt_signals) > 20:
                     del xt_signals[0]
                 if cur_signal is not None and self.export_xt_filename:
                     self.append_data(
@@ -6295,6 +6336,9 @@ class CtaLineBar(object):
                                         'end': self.cur_bi.end,
                                         'price': price,
                                         'signal': qsbc_2nd})
+            if len(self.xt_2nd_signals) > 20:
+                del self.xt_2nd_signals[0]
+
             if cur_signal is not None and self.export_xt_filename:
                 self.append_data(
                     file_name=self.export_xt_filename.replace('_n_', f'_2nd_'),
@@ -6309,7 +6353,7 @@ class CtaLineBar(object):
         """
         获取n笔形态/信号的倒x笔结果
         :param n:
-        :param x: 倒x笔，如倒1笔
+        :param x: 倒x笔，如倒1笔, 倒0笔
         :return: {}
         """
         xt_signals = getattr(self, xt_name)

@@ -182,6 +182,7 @@ class CtaOptionEngine(BaseEngine):
         self.vt_tradeids = set()  # for filtering duplicate trade
         self.active_orders = {}
         self.internal_orderids = set()
+        self.single_execute_volume = 1
 
         self.net_pos_target = {}  # 净仓目标， vt_symbol: {pos: 正负数}
         self.net_pos_holding = {}  # 净仓持有， vt_symbol: {pos: 正负数}
@@ -222,6 +223,7 @@ class CtaOptionEngine(BaseEngine):
 
     def init_engine(self):
         """
+        初始化引擎
         """
         self.register_event()
         self.register_funcs()
@@ -233,6 +235,10 @@ class CtaOptionEngine(BaseEngine):
         self.load_strategy_setting()
 
         self.write_log("CTA策略引擎初始化成功")
+
+        if self.engine_config.get('single_execute_volume',0) > 0:
+            self.single_execute_volume = self.engine_config.get('single_execute_volume',1)
+            self.write_log(f'使用配置得单笔下仓数量:{self.single_execute_volume}')
 
         if self.engine_config.get('get_pos_from_db', False):
             self.write_log(f'激活数据库策略仓位比对模式')
@@ -318,6 +324,7 @@ class CtaOptionEngine(BaseEngine):
             if dt.hour == 2 and dt.minute == 59 and dt.second >= 55:
                 self.cancel_all(strategy)
 
+
         # 每分钟执行的逻辑
         if self.last_minute != dt.minute:
             self.last_minute = dt.minute
@@ -338,9 +345,9 @@ class CtaOptionEngine(BaseEngine):
                         (datetime.now() - order.datetime).total_seconds() > 60 and \
                         order.status in [Status.NOTTRADED, Status.PARTTRADED]:
                     self.write_log(
-                        f'内部活动订单{order.orderid}, {order.vt_symbol}[{order.name}], {order.direction.value}, {order.offset.value}超时')
+                        f'内部活动订单{order.orderid}, {order.vt_symbol}[{order.name}], {order.direction.value}, {order.offset.value},超时.发出撤单')
                     req = order.create_cancel_request()
-                    return self.main_engine.cancel_order(req, order.gateway_name)
+                    self.main_engine.cancel_order(req, order.gateway_name)
 
             for vt_symbol in set(self.net_pos_target.keys()).union(set(self.net_pos_holding.keys())):
                 self.execute_pos_target(vt_symbol)
@@ -394,20 +401,28 @@ class CtaOptionEngine(BaseEngine):
                 self.call_strategy_func(strategy, strategy.on_bar, {bar.vt_symbol: bar})
 
     def process_order_event(self, event: Event):
-        """"""
+        """
+        委托更新事件处理
+        :param event:
+        :return:
+        """
         order = event.data
 
         strategy = self.orderid_strategy_map.get(order.vt_orderid, None)
         if not strategy:
-            # self.write_log(f'委托单没有对应的策略设置:order:{order.__dict__}')
-            # self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
-            if order.type != OrderType.STOP:
-                if order.status in [Status.ALLTRADED, Status.CANCELLED, Status.REJECTED]:
-                    self.active_orders.pop(order.vt_orderid, None)
+            if order.vt_orderid in self.internal_orderids:
+                self.write_log(f'委托更新 => 内部仓位: {print_dict(order.__dict__)}')
+                # self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
+                if order.type != OrderType.STOP:
+                    if order.status in [Status.ALLTRADED, Status.CANCELLED, Status.REJECTED]:
+                        self.write_log(f'委托更新 => 内部仓位 => 移除活动订单')
+                        self.active_orders.pop(order.vt_orderid, None)
 
-                elif order.status in [Status.SUBMITTING, Status.NOTTRADED, Status.PARTTRADED]:
-                    self.active_orders.update({order.vt_orderid: copy(order)})
-
+                    elif order.status in [Status.SUBMITTING, Status.NOTTRADED, Status.PARTTRADED]:
+                        self.write_log(f'委托更新 => 内部仓位 => 更新活动订单')
+                        self.active_orders.update({order.vt_orderid: copy(order)})
+            else:
+                self.write_log(f'委托更新 => 系统账号 => {print_dict(order.__dict__)}')
             return
         self.write_log(f'委托更新:{order.vt_orderid} => 策略:{strategy.strategy_name}')
         # Remove vt_orderid if order is no longer active.
@@ -434,33 +449,44 @@ class CtaOptionEngine(BaseEngine):
         self.call_strategy_func(strategy, strategy.on_order, order)
 
     def process_trade_event(self, event: Event):
-        """"""
+        """
+        成交更新事件处理
+        :param event:
+        :return:
+        """
         trade = event.data
 
         # Filter duplicate trade push
         if trade.vt_tradeid in self.vt_tradeids:
-            self.write_log(f'成交单的交易编号{trade.vt_tradeid}已处理完毕,不再处理')
+            self.write_log(f'成交更新 => 交易编号{trade.vt_tradeid}已处理完毕,不再处理')
             return
         self.vt_tradeids.add(trade.vt_tradeid)
 
         strategy = self.orderid_strategy_map.get(trade.vt_orderid, None)
+
+        # 该成交得单子，不属于策略，可能是内部，或者其他实例得成交
         if not strategy:
+
+            # 属于内部单子
             if trade.vt_orderid in self.internal_orderids:
-                cur_pos = self.net_pos_holding.get(trade.vt_symbol,0)
+                cur_pos = self.net_pos_holding.get(trade.vt_symbol, 0)
                 if trade.direction == Direction.LONG:
                     new_pos = cur_pos + trade.volume
                 else:
                     new_pos = cur_pos - trade.volume
-                self.write_log(f'内部委托单成交更新，{trade.vt_symbol}[{trade.name}]: {cur_pos} => {new_pos}')
+                self.write_log(f'成交更新 => 内部订单 {trade.vt_symbol}[{trade.name}]: {cur_pos} => {new_pos}')
                 self.write_log(f'成交单:trade:{print_dict(trade.__dict__)}')
                 self.net_pos_holding.update({trade.vt_symbol: new_pos})
                 self.save_internal_data()
+
+            # 可能是其他实例得
             else:
-                self.write_log(f'成交单没有对应的策略设置:trade:{trade.__dict__}')
-                self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
+                self.write_log(f'成交更新 => 没有对应的策略设置:trade:{trade.__dict__}')
+                self.write_log(f'成交更新 => 当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
+                self.write_log(f'成交更新 => 当前内部订单清单:{self.internal_orderids}')
             return
 
-        self.write_log(f'成交更新:{trade.vt_orderid} => 策略:{strategy.strategy_name}')
+        self.write_log(f'成交更新 =>:{trade.vt_orderid} => 策略:{strategy.strategy_name}')
 
         # Update strategy pos before calling on_trade method
         # 取消外部干预策略pos，由策略自行完成更新
@@ -885,7 +911,7 @@ class CtaOptionEngine(BaseEngine):
         for vt_orderid in copy(vt_orderids):
             self.cancel_order(strategy_name, vt_orderid)
 
-    def handel_internal_order(self, **kwargs) -> str:
+    def handel_internal_order(self, **kwargs):
         """
         处理内部订单：
         策略 => 内部订单 => 产生内部订单号 => 登记内部处理逻辑 => 添加后续异步task
@@ -996,9 +1022,9 @@ class CtaOptionEngine(BaseEngine):
             j = load_json(f_name,auto_save=True)
             self.net_pos_target = j.get('net_pos_target', {})
             self.net_pos_holding = j.get('net_pos_holding', {})
-            self.write_log('恢复内部持仓目标：{}'.format(
+            self.write_log('恢复内部目标持仓：{}'.format(
                 ';'.join([f'{k}[{self.get_name(k)}]:{v}' for k,v in self.net_pos_target.items()])))
-            self.write_log('恢复内部持仓：{}'.format(
+            self.write_log('恢复内部现有持仓：{}'.format(
                 ';'.join([f'{k}[{self.get_name(k)}]:{v}' for k, v in self.net_pos_target.items()])))
 
         except Exception as ex:
@@ -1025,10 +1051,10 @@ class CtaOptionEngine(BaseEngine):
         :param vt_symbol:
         :return:
         """
-        target_pos = self.net_pos_target.get(vt_symbol, 0)
-        holding_pos = self.net_pos_holding.get(vt_symbol, 0)
+        target_pos = self.net_pos_target.get(vt_symbol, 0)   # 该合约内部得目标持仓
+        holding_pos = self.net_pos_holding.get(vt_symbol, 0)  # 该合约内部得现有持仓
 
-        diff_pos = target_pos - holding_pos
+        diff_pos = target_pos - holding_pos   # 找出差异
         if diff_pos == 0:
             return
         # 获取最新价
@@ -1051,26 +1077,29 @@ class CtaOptionEngine(BaseEngine):
             return
 
         price_tick = self.get_price_tick(vt_symbol)
-        # 需要买入
+        # 需要增加仓位（ buy or cover)
         if diff_pos > 0:
-            # 账号得多、空
+            # 账号得多、空仓位
             acc_long_position = self.get_position(vt_symbol=vt_symbol, direction=Direction.LONG)
             acc_long_pos = 0 if acc_long_position is None else acc_long_position.volume-acc_long_position.frozen
             acc_short_position = self.get_position(vt_symbol=vt_symbol, direction=Direction.SHORT)
             acc_short_pos = 0 if acc_short_position is None else acc_short_position.volume-acc_short_position.frozen
-            cover_pos = 0
-            buy_pos = 0
+
+            if diff_pos > self.single_execute_volume:
+                self.write_log(f'内部仓位 => 执行{vt_symbol} => 降低交易头寸: {diff_pos} -> {self.single_execute_volume}')
+                diff_pos = self.single_execute_volume
+
             # 仅平仓
             if acc_short_pos > 0:
                 # 优先平空单
-                cover_pos = min(diff_pos,acc_short_pos)
+                cover_pos = min(diff_pos, acc_short_pos)
                 buy_pos = diff_pos - cover_pos
             else:
                 # 仅开仓
                 cover_pos = 0
                 buy_pos = diff_pos
 
-            self.write_log(f'{self.engine_name}仓位执行{vt_symbol}[{self.get_name(vt_symbol)}]: ' +
+            self.write_log(f'内部仓位 => 执行{vt_symbol}[{self.get_name(vt_symbol)}]: ' +
                            f'[账号多单:{acc_long_pos},空单:{acc_short_pos}]' +
                            f'[holding:{holding_pos} =>target:{target_pos} ] => cover:{cover_pos} + buy:{buy_pos}')
             if cover_pos > 0:
@@ -1087,6 +1116,7 @@ class CtaOptionEngine(BaseEngine):
                         internal=False
                     )
                     if len(vt_orderids) > 0:
+                        self.write_log(f'内部仓位 => 执行 =>  cover 登记委托编号:{vt_orderids}')
                         self.internal_orderids =self.internal_orderids.union(vt_orderids)
 
             if buy_pos > 0:
@@ -1103,16 +1133,21 @@ class CtaOptionEngine(BaseEngine):
                         internal=False
                     )
                     if len(vt_orderids) > 0:
+                        self.write_log(f'内部仓位 => 执行 => buy 登记委托编号:{vt_orderids}')
                         self.internal_orderids= self.internal_orderids.union(vt_orderids)
         # 需要卖出 ( diff_pos < 0)
         else:
-            # 账号得多、空
+            # 账号得多、空单
             acc_long_position = self.get_position(vt_symbol=vt_symbol, direction=Direction.LONG)
             acc_long_pos = 0 if acc_long_position is None else acc_long_position.volume - acc_long_position.frozen
             acc_short_position = self.get_position(vt_symbol=vt_symbol, direction=Direction.SHORT)
             acc_short_pos = 0 if acc_short_position is None else acc_short_position.volume - acc_short_position.frozen
 
-            # 如果持有多单，优先平掉多单
+            if abs(diff_pos) > self.single_execute_volume:
+                self.write_log(f'内部仓位 => 执行{vt_symbol} => 降低交易头寸: {abs(diff_pos)} -> {self.single_execute_volume}')
+                diff_pos = -self.single_execute_volume
+
+            # 如果账号持有多单，优先平掉账号多单
             if acc_long_pos > 0:
                 sell_pos = min(abs(diff_pos), acc_long_pos)
                 short_pos = abs(diff_pos) - sell_pos
@@ -1121,7 +1156,7 @@ class CtaOptionEngine(BaseEngine):
                 sell_pos = 0
                 short_pos = abs(diff_pos)
 
-            self.write_log(f'{self.engine_name}仓位执行{vt_symbol}[{self.get_name(vt_symbol)}]' +
+            self.write_log(f'内部仓位 => 执行{vt_symbol}[{self.get_name(vt_symbol)}]' +
                            f'[账号多单:{acc_long_pos},空单:{acc_short_pos}]，' +
                            f'[holding:{holding_pos} => target:{target_pos}] => sell:{sell_pos}, short:{short_pos}')
 
@@ -1139,6 +1174,7 @@ class CtaOptionEngine(BaseEngine):
                         internal=False
                     )
                     if len(vt_orderids) > 0:
+                        self.write_log(f'内部仓位 => 执行 => sell 登记委托编号:{vt_orderids}')
                         self.internal_orderids = self.internal_orderids.union(vt_orderids)
             if short_pos > 0:
                 if not self.exist_order(vt_symbol, direction=Direction.SHORT, offset=Offset.OPEN):
@@ -1147,13 +1183,14 @@ class CtaOptionEngine(BaseEngine):
                         vt_symbol=vt_symbol,
                         price=cur_price,
                         volume=short_pos,
-                        direction=Direction.LONG,
+                        direction=Direction.SHORT,
                         offset=Offset.OPEN,
                         order_type=OrderType.LIMIT,
                         stop=False,
                         internal=False
                     )
                     if len(vt_orderids) > 0:
+                        self.write_log(f'内部仓位 => 执行 => short 登记委托编号:{vt_orderids}')
                         self.internal_orderids = self.internal_orderids.union(vt_orderids)
 
     def exist_order(self, vt_symbol, direction, offset):
@@ -1174,7 +1211,11 @@ class CtaOptionEngine(BaseEngine):
                 continue
 
             if order.vt_symbol == vt_symbol and order.direction == direction and order.offset == offset:
-                self.write_log(f'引擎存在相同得内部活动订单:{order.name}')
+                self.write_log(f'引擎存在相同的内部活动订单:{order.name}')
+                return True
+
+            if order.vt_symbol == vt_symbol and order.direction != direction and order.offset != offset:
+                self.write_log(f'引擎存在可能自成交的内部活动订单:{order.name}')
                 return True
 
         return False

@@ -95,7 +95,7 @@ def get_stock_exchange(code, vn=True):
 
     market_id = 0  # 缺省深圳
     code = str(code)
-    if code[0] in ['5', '6', '9'] or code[:3] in ["009", "126", "110", "201", "202", "203", "204"]:
+    if code[0] in ['5', '6', '9'] or code[:3] in ["009", "126", "110", "201", "202", "203", "204","113"]:
         market_id = 1  # 上海
     try:
         from vnpy.trader.constant import Exchange

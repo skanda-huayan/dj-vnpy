@@ -392,6 +392,11 @@ class PbGateway(BaseGateway):
 
     def send_order(self, req: OrderRequest) -> str:
         """"""
+        k = f'{req.vt_symbol}_{req.direction.value}_{req.offset.value}'
+        if len(self.rejected_orders.get(k, [])) > 5:
+            self.write_error(f'该合约相同请求已经被拒单五次，不能再发单:{print_dict(req.__dict__)}')
+            return ""
+
         return self.td_api.send_order(req)
 
     def cancel_order(self, req: CancelRequest) -> None:
