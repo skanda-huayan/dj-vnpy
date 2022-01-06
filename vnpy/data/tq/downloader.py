@@ -6,15 +6,31 @@
 # 2.  下载tick时，5档行情都下载
 # 3.  五档行情变量调整适合vnpy的命名方式
 
+import os
 import csv
 from datetime import date, datetime
 from typing import Union, List
-
+import json
 from tqsdk.api import TqApi
 from tqsdk.datetime import _get_trading_day_start_time, _get_trading_day_end_time
 from tqsdk.diff import _get_obj
 from tqsdk.utils import _generate_uuid
 
+def get_account_config():
+    """
+    获取本地账号配置
+    :return:
+    """
+    config_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), 'auth_account.json'))
+    if os.path.exists(config_file_name):
+        try:
+            with open(config_file_name, mode="r", encoding="UTF-8") as f:
+                data = json.load(f)
+            return data
+        except Exception as ex:
+            pass
+
+    return {}
 
 class DataDownloader:
     """

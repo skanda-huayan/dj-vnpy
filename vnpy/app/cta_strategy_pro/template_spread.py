@@ -419,9 +419,9 @@ class CtaSpreadTemplate(CtaTemplate):
         if order_info is not None:
             # 委托单记录 =》 找到 Grid
             grid = order_info.get('grid')
-            if grid and order_info.get('offset', None) == Offset.OPEN:
+            if grid :
                 # 更新平均开仓/平仓得价格，数量
-                self.update_grid_trade(trade, grid)
+                self.update_grid_trade(order_info.get('offset', None), trade, grid)
 
     def update_pos(self, price, volume, operation, dt):
         """更新持仓组件得pos"""
@@ -535,14 +535,14 @@ class CtaSpreadTemplate(CtaTemplate):
         """修正order被拆单得情况"""
         order_info = self.active_orders.get(order.vt_orderid, None)
         if order_info:
-            volume = order_info.get('volume')
-            traded = order_info.get('traded')
+            volume = order_info.get('volume')  # 原始委托数量
+            traded = order_info.get('traded')  # 原始委托中，已成交的数量
             if volume != order.volume:
-                self.write_log(f'调整{order.vt_orderid} {order.vt_symbol} 委托:{volume}=>{order.volume}')
+                self.write_log(f'更新未完成订单{order.vt_orderid} {order.vt_symbol} 的委托数量:{volume}=>{order.volume}')
                 order_info.update({'volume': order.volume})
             if traded != order.traded:
-                self.write_log(f'{order.vt_orderid} {order.vt_symbol} 已成交 :{traded}=>{traded + order.traded}')
-                order_info.update({'volume': traded + order.traded})
+                self.write_log(f'更新未完成订单{order.vt_orderid} {order.vt_symbol} 的已成交数量 :{traded}=>{traded + order.traded}')
+                order_info.update({'traded': traded + order.traded})
 
     def on_order(self, order: OrderData):
         """报单更新"""
@@ -582,9 +582,9 @@ class CtaSpreadTemplate(CtaTemplate):
         else:
             self.write_error(u'委托单{}不在策略的未完成订单列表中:{}'.format(order.vt_orderid, self.active_orders))
 
-    def update_grid_trade(self, trade: TradeData, grid: CtaGrid):
+    def update_grid_trade(self, offset: Offset, trade: TradeData, grid: CtaGrid):
         """更新网格内，主动腿/被动腿得开平仓信息"""
-        if trade.offset == Offset.OPEN:
+        if offset == Offset.OPEN:
             # 更新开仓均价/数量
             if trade.vt_symbol == self.act_vt_symbol:
                 opened_price = grid.snapshot.get('act_open_price', 0)
@@ -660,7 +660,7 @@ class CtaSpreadTemplate(CtaTemplate):
                 grid.traded_volume = 0
 
                 # 平仓完毕（cover， sell）
-                if order.offset != Offset.OPEN:
+                if order_info.get("offset", None) != Offset.OPEN:
                     grid.open_status = False
                     grid.close_status = True
 

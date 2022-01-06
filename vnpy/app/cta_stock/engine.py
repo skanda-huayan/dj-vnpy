@@ -353,6 +353,11 @@ class CtaEngine(BaseEngine):
             self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
             return
         self.write_log(f'委托更新:{order.vt_orderid} => 策略:{strategy.strategy_name}')
+
+        if len(order.sys_orderid) > 0 and  order.sys_orderid not in self.orderid_strategy_map:
+            self.write_log(f'登记系统委托号 {order.sys_orderid} => 策略：{strategy.strategy_name} 映射')
+            self.orderid_strategy_map.update({order.sys_orderid: strategy})
+
         # Remove vt_orderid if order is no longer active.
         vt_orderids = self.strategy_orderid_map[strategy.strategy_name]
         if order.vt_orderid in vt_orderids and not order.is_active():
@@ -388,11 +393,16 @@ class CtaEngine(BaseEngine):
 
         strategy = self.orderid_strategy_map.get(trade.vt_orderid, None)
         if not strategy:
-            self.write_log(f'成交单没有对应的策略设置:trade:{trade.__dict__}')
-            self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
-            return
+            if trade.sys_orderid and trade.sys_orderid in self.orderid_strategy_map:
+                self.write_log(f'使用系统委托单号{trade.sys_orderid} => 策略')
+                strategy = self.orderid_strategy_map.get(trade.sys_orderid, None)
 
-        self.write_log(f'成交更新:{trade.vt_orderid} => 策略:{strategy.strategy_name}')
+            if not strategy:
+                self.write_log(f'成交单没有对应的策略设置:trade:{trade.__dict__}')
+                self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
+                return
+
+        self.write_log(f'成交更新,本地委托{trade.vt_orderid},系统委托{trade.sys_orderid} => 策略:{strategy.strategy_name}')
 
         # Update strategy pos before calling on_trade method
         # 取消外部干预策略pos，由策略自行完成更新

@@ -412,6 +412,10 @@ class CtaOptionEngine(BaseEngine):
         if not strategy:
             if order.vt_orderid in self.internal_orderids:
                 self.write_log(f'委托更新 => 内部仓位: {print_dict(order.__dict__)}')
+                if order.sys_orderid and order.sys_orderid != order.orderid and order.sys_orderid not in self.internal_orderids:
+                    self.write_log(f'添加系统编号 {order.sys_orderid}=> 内部订单')
+                    self.internal_orderids.add(order.sys_orderid)
+
                 # self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
                 if order.type != OrderType.STOP:
                     if order.status in [Status.ALLTRADED, Status.CANCELLED, Status.REJECTED]:
@@ -425,6 +429,9 @@ class CtaOptionEngine(BaseEngine):
                 self.write_log(f'委托更新 => 系统账号 => {print_dict(order.__dict__)}')
             return
         self.write_log(f'委托更新:{order.vt_orderid} => 策略:{strategy.strategy_name}')
+        if len(order.sys_orderid) > 0 and  order.sys_orderid not in self.orderid_strategy_map:
+            self.write_log(f'登记系统委托号 {order.sys_orderid} => 策略：{strategy.strategy_name} 映射')
+
         # Remove vt_orderid if order is no longer active.
         vt_orderids = self.strategy_orderid_map[strategy.strategy_name]
         if order.vt_orderid in vt_orderids and not order.is_active():
@@ -468,7 +475,7 @@ class CtaOptionEngine(BaseEngine):
         if not strategy:
 
             # 属于内部单子
-            if trade.vt_orderid in self.internal_orderids:
+            if trade.vt_orderid in self.internal_orderids or trade.sys_orderid in self.internal_orderids:
                 cur_pos = self.net_pos_holding.get(trade.vt_symbol, 0)
                 if trade.direction == Direction.LONG:
                     new_pos = cur_pos + trade.volume
@@ -478,13 +485,18 @@ class CtaOptionEngine(BaseEngine):
                 self.write_log(f'成交单:trade:{print_dict(trade.__dict__)}')
                 self.net_pos_holding.update({trade.vt_symbol: new_pos})
                 self.save_internal_data()
+                return
+
+            if trade.sys_orderid and trade.sys_orderid in self.orderid_strategy_map:
+                self.write_log(f'使用系统委托单号{trade.sys_orderid} => 策略')
+                strategy = self.orderid_strategy_map.get(trade.sys_orderid, None)
 
             # 可能是其他实例得
-            else:
+            if not strategy:
                 self.write_log(f'成交更新 => 没有对应的策略设置:trade:{trade.__dict__}')
                 self.write_log(f'成交更新 => 当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
                 self.write_log(f'成交更新 => 当前内部订单清单:{self.internal_orderids}')
-            return
+                return
 
         self.write_log(f'成交更新 =>:{trade.vt_orderid} => 策略:{strategy.strategy_name}')
 

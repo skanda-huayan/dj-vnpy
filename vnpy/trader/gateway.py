@@ -792,8 +792,6 @@ class LocalOrderManager:
         Keep an order buf before pushing it to gateway.
         """
         self.orders[order.orderid] = copy(order)
-
-
         self.gateway.on_order(order)
 
     def cancel_order(self, req: CancelRequest) -> None:

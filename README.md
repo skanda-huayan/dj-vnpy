@@ -10,6 +10,10 @@ github 链接： https://github.com/msincenselee/vnpy
 gitee  链接： https://gitee.com/vnpy2/vnpy
 
 ###Fork版本主要改进如下
+19、期权CTA引擎
+
+    -vnpy.app.cta_option
+        + 支持股票ETF期权的CTA策略
 
 18、CTA股票选股引擎
 
@@ -162,12 +166,14 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
 QQ/Wechat：28888502
 
 系列在线课程
-
+    
+    2022 期货CTA课程： http://www.uquant.org/course/49
+    
     2021 股票CTA实战课程：http://www.uquant.org/course/49
 
     2021 期货缠论高级课程：http://www.uquant.org/course/48
 
-    2021 数字货币CTA课程：http://www.uquant.org/course/46
+    2021 数字CTA课程：http://www.uquant.org/course/46
 
     2020 期货套利课程：http://www.uquant.org/course/43
 

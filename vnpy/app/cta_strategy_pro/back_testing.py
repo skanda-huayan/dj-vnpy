@@ -425,6 +425,14 @@ class BackTestingEngine(object):
     @lru_cache()
     def get_size(self, vt_symbol: str):
         """查询合约的size"""
+        if vt_symbol not in self.size:
+            symbol, exchange = extract_vt_symbol(vt_symbol)
+            if symbol in self.size:
+                return self.size.get(symbol)
+            else:
+                underly_symbol = get_underlying_symbol(symbol).upper()
+                return self.size.get(f'{underly_symbol}99',10)
+
         return self.size.get(vt_symbol, 10)
 
     def set_price(self, vt_symbol: str, price: float):
@@ -440,11 +448,16 @@ class BackTestingEngine(object):
         if rate >= 0.1:
             self.fix_commission.update({vt_symbol: rate})
 
+    @lru_cache()
     def get_commission_rate(self, vt_symbol: str):
         """ 获取保证金比例，缺省万分之一"""
         if vt_symbol not in self.commission_rate:
             symbol, exchange = extract_vt_symbol(vt_symbol)
-            return self.commission_rate.get(symbol, float(0.0001))
+            if symbol in self.commission_rate:
+                return self.commission_rate.get(symbol)
+            else:
+                underly_symbol = get_underlying_symbol(symbol).upper()
+                return self.commission_rate.get(f'{underly_symbol}99', float(0.0001))
         return self.commission_rate.get(vt_symbol, float(0.0001))
 
     def get_fix_commission(self, vt_symbol: str):
@@ -887,6 +900,16 @@ class BackTestingEngine(object):
             self.write_log(f"新增订阅指数合约:{setting['idx_symbol']}")
             self.subscribe_symbol(strategy_name=strategy_name, vt_symbol=setting['idx_symbol'])
 
+        # 如果act_vt_symbol不再列表中，需要订阅
+        if 'act_vt_symbol' in setting.keys() and setting['act_vt_symbol'] not in self.symbol_strategy_map.keys():
+            self.write_log(f"新增订阅act_vt_symbol合约:{setting['act_vt_symbol']}")
+            self.subscribe_symbol(strategy_name=strategy_name, vt_symbol=setting['act_vt_symbol'])
+
+        # 如果pas_vt_symbol不再列表中，需要订阅
+        if 'pas_vt_symbol' in setting.keys() and setting['pas_vt_symbol'] not in self.symbol_strategy_map.keys():
+            self.write_log(f"新增订阅pas_vt_symbol合约:{setting['pas_vt_symbol']}")
+            self.subscribe_symbol(strategy_name=strategy_name, vt_symbol=setting['pas_vt_symbol'])
+
         if strategy_setting.get('auto_init', False):
             self.write_log(u'自动初始化策略')
             strategy.on_init()
@@ -1264,8 +1287,8 @@ class BackTestingEngine(object):
                                                  target=self.get_price_tick(vt_symbol)) - self.get_price_tick(
                     vt_symbol)  # 在当前时间点前发出的卖出委托可能的最优成交价
             else:
-                buy_cross_price = tick.last_price
-                sell_cross_price = tick.last_price
+                buy_cross_price = tick.last_price if not tick.ask_price_1 else tick.ask_price_1
+                sell_cross_price = tick.last_price if not tick.bid_price_1 else tick.bid_price_1
                 buy_best_cross_price = tick.last_price
                 sell_best_cross_price = tick.last_price
 
@@ -2317,6 +2340,8 @@ class BackTestingEngine(object):
 
         result_info.update({u'Sharpe Ratio': d['sharpe']})
         self.output(u'Sharpe Ratio：\t%s' % format_number(d['sharpe']))
+        result_file = os.path.abspath(os.path.join(self.get_logs_path(), '{}_result.csv'.format(self.test_name)))
+        self.append_data(result_file, result_info)
 
         # 保存回测结果/交易记录/日线统计 至数据库
         self.save_result_to_mongo(result_info)

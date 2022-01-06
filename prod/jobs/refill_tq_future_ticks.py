@@ -11,7 +11,7 @@ import pandas as pd
 from contextlib import closing
 from datetime import datetime, timedelta
 import argparse
-from tqsdk import TqApi, TqSim
+from tqsdk import TqApi, TqSim,TqAuth
 
 vnpy_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if vnpy_root not in sys.path:
@@ -21,7 +21,7 @@ os.environ["VNPY_TESTING"] = "1"
 
 from vnpy.data.tdx.tdx_future_data import get_future_contracts, Exchange
 from vnpy.trader.utility import get_csv_last_dt, get_underlying_symbol, extract_vt_symbol
-from vnpy.data.tq.downloader import DataDownloader
+from vnpy.data.tq.downloader import DataDownloader,get_account_config
 
 if __name__ == "__main__":
     if len(sys.argv) <= 1:
@@ -36,9 +36,9 @@ if __name__ == "__main__":
     if len(args.symbol) == 0:
         print('下载合约未设定 参数 -s rb2010')
         os._exit(0)
-
+    auth_dict = get_account_config()
     # 开始下载(使用快期的免费行情websocket)
-    api = TqApi(account=TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
+    api = TqApi(account=TqSim(), auth=TqAuth(auth_dict['user_name'],auth_dict['password'])) #  url="wss://u.shinnytech.com/t/md/front/mobile"
     download_tasks = {}
     begin_date = datetime.strptime(args.begin, '%Y%m%d')
     end_date = datetime.strptime(args.end, '%Y%m%d')
