@@ -81,11 +81,14 @@ ALL_MARKET_END_HOUR = 16
 @lru_cache()
 def get_tdx_marketid(symbol):
     """普通合约/指数合约=》tdx合约所在市场id"""
-    underlying_symbol = get_underlying_symbol(symbol)
-    tdx_index_symbol = underlying_symbol.upper() + 'L9'
+    if symbol.endswith('L9'):
+        tdx_index_symbol = symbol
+    else:
+        underlying_symbol = get_underlying_symbol(symbol).upper()
+        tdx_index_symbol = underlying_symbol.upper() + 'L9'
     market_id = INIT_TDX_MARKET_MAP.get(tdx_index_symbol, None)
     if market_id is None:
-        raise KeyError(f'{tdx_index_symbol}不存在INIT_TDX_MARKET_MAP中')
+        raise KeyError(f'{symbol} => {tdx_index_symbol} 不存在INIT_TDX_MARKET_MAP中')
     return market_id
 
 
@@ -446,7 +449,7 @@ class TdxFutureData(object):
                 # 利用api查询历史数据
                 _res = self.api.get_instrument_bars(
                     category=tdx_period,
-                    market=self.symbol_market_dict.get(tdx_index_symbol, 0),
+                    market=get_tdx_marketid(tdx_symbol),
                     code=tdx_symbol,
                     start=_pos,
                     count=QSIZE)
