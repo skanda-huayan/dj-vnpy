@@ -1483,7 +1483,7 @@ class CtaSpreadTemplate(CtaTemplate):
                              f'今仓{self.act_pos.short_td}/昨{self.act_pos.short_yd}, 不满足{act_close_volume}')
             return []
         if self.pas_pos.long_pos < pas_close_volume:
-            self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.longt_pos}'
+            self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.long_pos}'
                              f'今仓{self.pas_pos.long_td}/昨{self.pas_pos.long_yd}, 不满足{act_close_volume}')
             return []
 
