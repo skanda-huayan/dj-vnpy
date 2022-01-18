@@ -6,7 +6,7 @@ from contextlib import closing
 import os
 from datetime import datetime, timedelta
 from functools import lru_cache
-from tqsdk import TqApi, TqSim
+from tqsdk import TqApi, TqSim,TqAuth
 from vnpy.data.tq.downloader import DataDownloader
 from vnpy.trader.constant import (
     Direction,
@@ -22,6 +22,7 @@ from vnpy.trader.object import TickData, BarData
 from vnpy.trader.utility import extract_vt_symbol, get_trading_date
 import pandas as pd
 import csv
+from vnpy.data.tq.downloader import get_account_config
 
 # pd.pandas.set_option('display.max_rows', None)  # 设置最大显示行数，超过该值用省略号代替，为None时显示所有行。
 # pd.pandas.set_option('display.max_columns', None)  # 设置最大显示列数，超过该值用省略号代替，为None时显示所有列。
@@ -59,6 +60,7 @@ def to_tq_symbol(symbol: str, exchange: Exchange) -> str:
     """
     TQSdk exchange first
     """
+    count = 0
     for count, word in enumerate(symbol):
         if word.isdigit():
             break
@@ -128,8 +130,9 @@ class TqFutureData():
 
     def __init__(self, strategy=None):
         self.strategy = strategy  # 传进来策略实例，这样可以写日志到策略实例
+        auth_dict = get_account_config()
 
-        self.api = TqApi(TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
+        self.api = TqApi(TqSim(),auth=TqAuth(auth_dict['user_name'],auth_dict['password']))  # url="wss://u.shinnytech.com/t/md/front/mobile"
 
     def get_tick_serial(self, vt_symbol: str):
         # 获取最新的8964个数据 tick的话就相当于只有50分钟左右
