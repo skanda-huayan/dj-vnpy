@@ -603,6 +603,13 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
                 if bi_9.low > zg:
                     return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔ZG三买')
 
+                # 参考双重底或者圆弧底， 在 bi_5.high => bi_7.high => p点 形成一条斜线，如果bi_9.low 在斜线之上，就是三买
+                if gg == bi_5.high and zg == bi_7.high:
+                    atan = (gg - zg) / (bi_5.bars + bi_6.bars)
+                    p = bi_7.high - atan * (bi_7.bars + bi_8.bars + bi_9.bars)
+                    if bi_9.low > p:
+                        return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔ZG三买')
+
                 # 类二买
                 if bi_9.high > gg > zg > bi_9.low > zd:
                     return ChanSignals.Q2L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二买', v2='九笔')
@@ -654,6 +661,13 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
             if zg > zd and bi_8.low < dd:  # 567构成中枢，且8的低点小于dd
                 if bi_9.high < zd:
                     return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔ZD三卖')
+
+                # 参考双重顶或者圆弧顶， 在 bi_5.low => bi_7.low => p点 形成一条斜线，如果bi_9.high 在斜线之下，就是三卖
+                if dd == bi_5.low and zd == bi_7.low:
+                    atan = (zd - dd) / (bi_5.bars + bi_6.bars)
+                    p = bi_7.low + atan * (bi_7.bars + bi_8.bars + bi_9.bars)
+                    if bi_9.high < p:
+                        return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔ZD三卖')
 
                 # 类二卖
                 if dd < zd <= bi_9.high < zg:
