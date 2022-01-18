@@ -590,6 +590,19 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
                 > max([x.low for x in [bi_3, bi_5, bi_7]]) > bi_1.low == min_low:
             return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔GG三买')
 
+        # 类三买（357构成收敛中枢，8的力度小于2，9回调不跌破收敛中枢的末笔7，构成三买）
+        if bi_8.height < bi_2.height and max_high == bi_9.high \
+                > max([x.high for x in [bi_3, bi_5, bi_7]]) \
+                > min([x.high for x in [bi_3, bi_5, bi_7]]) \
+                > max([x.low for x in [bi_3, bi_5, bi_7]]) > bi_1.low == min_low:
+            if bi_3.height > bi_5.height > bi_7.height \
+                and bi_3.high > bi_5.high > bi_7.high:
+                # 计算收敛三角的上切线，测算出bi_9对应的切线价格
+                atan = (bi_3.high - bi_7.high) / (bi_3.bars + bi_4.bars + bi_5.bars + bi_6.bar - 3)
+                p = bi_7.high - atan * (bi_7.bars + bi_8.bars + bi_9.bars - 2)
+                if bi_9.low > p:
+                    return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔收敛突破三买')
+
         # # 九笔三买(789回调）中枢可能在3~7内
         # if min_low == bi_1.low and max_high == bi_9.high \
         #         and bi_9.low > min([x.high for x in [bi_3, bi_5, bi_7]]) > max([x.low for x in [bi_3, bi_5, bi_7]]):
@@ -605,8 +618,8 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
 
                 # 参考双重底或者圆弧底， 在 bi_5.high => bi_7.high => p点 形成一条斜线，如果bi_9.low 在斜线之上，就是三买
                 if gg == bi_5.high and zg == bi_7.high:
-                    atan = (gg - zg) / (bi_5.bars + bi_6.bars)
-                    p = bi_7.high - atan * (bi_7.bars + bi_8.bars + bi_9.bars)
+                    atan = (gg - zg) / (bi_5.bars + bi_6.bars - 1)
+                    p = bi_7.high - atan * (bi_7.bars + bi_8.bars + bi_9.bars -2)
                     if bi_9.low > p:
                         return ChanSignals.Q3L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三买', v2='九笔ZG三买')
 
@@ -649,10 +662,21 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
                 and (bi_9.height < bi_5.height or bi_9.atan <= bi_5.atan):
             return ChanSignals.Q1S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类一卖', v2='九笔aAbBc式')
 
-        # 九笔类三卖
+        # 九笔类三卖, 3/5/7形成中枢， 9笔回调不进中枢
         if max_high == bi_1.high and min_low == bi_9.low \
                 and bi_9.high < max([x.low for x in [bi_3, bi_5, bi_7]]) < min([x.high for x in [bi_3, bi_5, bi_7]]):
             return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔')
+
+        # 九笔类三卖 3、5、7形成收敛三角中枢， 9笔回调不进三角
+        if max_high == bi_1.high and min_low == bi_9.low \
+                and max([x.low for x in [bi_3, bi_5, bi_7]]) < min([x.high for x in [bi_3, bi_5, bi_7]]):
+            if bi_3.height > bi_5.height > bi_7.height \
+                and bi_3.low < bi_5.low < bi_7.low:
+                # 计算收敛三角的下切线，测算出bi_9对应的切线价格
+                atan = ( bi_7.low - bi_3.low ) / (bi_3.bars + bi_4.bars + bi_5.bars + bi_6.bars -3 )
+                p = bi_7.low + atan * (bi_7.bars + bi_8.bars + bi_8.bars -2)
+                if bi_9.high < p:
+                    return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔')
 
         if min_low == bi_1.low and max_high == bi_5.high and bi_2.high < bi_4.low:  # 前五笔构成向上类趋势
             zd = max([x.low for x in [bi_5, bi_7]])
