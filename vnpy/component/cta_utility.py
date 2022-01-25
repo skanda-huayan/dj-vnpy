@@ -627,6 +627,16 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
                 if bi_9.high > gg > zg > bi_9.low > zd:
                     return ChanSignals.Q2L0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二买', v2='九笔')
 
+        if min_low == bi_7.low and max_high == bi_1.high and bi_6.high < bi_2.low:  # 前7笔构成向下类趋势
+            zd = max([x.low for x in [bi_5, bi_6]])
+            zg = min([x.high for x in [bi_4, bi_6]])
+            gg = max([x.high for x in [bi_4, bi_6]])
+            if zg > zd and bi_8.high > gg == bi_4.high :  # 456构成中枢，7离开中枢，8反包且8的高点大于gg,4高 >6高点
+                atan = (bi_4.high - bi_6.high) / (bi_5.bars + bi_6.bars - 1)
+                p = bi_6.high - atan * (bi_7.bars + bi_8.bars + bi_9.bars - 2)
+                if zd > bi_9.low > p:
+                    return ChanSignals.Q2L0.value
+
     elif direction == 1:
 
         # 倒9笔是最高点，倒一笔是最低点
@@ -688,14 +698,24 @@ def check_chan_xt_nine_bi(kline, bi_list: List[ChanObject]):
 
                 # 参考双重顶或者圆弧顶， 在 bi_5.low => bi_7.low => p点 形成一条斜线，如果bi_9.high 在斜线之下，就是三卖
                 if dd == bi_5.low and zd == bi_7.low:
-                    atan = (zd - dd) / (bi_5.bars + bi_6.bars)
-                    p = bi_7.low + atan * (bi_7.bars + bi_8.bars + bi_9.bars)
+                    atan = (zd - dd) / (bi_5.bars + bi_6.bars - 1)
+                    p = bi_7.low + atan * (bi_7.bars + bi_8.bars + bi_9.bars - 2)
                     if bi_9.high < p:
                         return ChanSignals.Q3S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类三卖', v2='九笔ZD三卖')
 
                 # 类二卖
                 if dd < zd <= bi_9.high < zg:
                     return ChanSignals.Q2S0.value  # Signal(k1=freq.value, k2=di_name, k3='类买卖点', v1='类二卖', v2='九笔')
+
+        if min_low == bi_1.low and max_high == bi_7.high and bi_2.high < bi_6.low: # 前7笔形成上涨趋势
+            zd = max([x.low for x in [bi_4, bi_6]])
+            zg = min([x.high for x in [bi_4, bi_6]])
+            dd = min([x.low for x in [bi_4, bi_6]])
+            if zg > zd and bi_8.low < dd == bi_4.low:  # 456构成中枢，7离开中枢，8反包且8的低点小于dd,4低点< 6低点
+                atan = (bi_6.low - bi_4.low) / (bi_5.bars + bi_6.bars -1)
+                p = bi_6.low + atan * (bi_7.bars + bi_8.bars + bi_9.bars - 2)
+                if zg < bi_9.high < p:
+                    return ChanSignals.Q2S0.value
 
     return v
 

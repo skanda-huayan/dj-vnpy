@@ -142,9 +142,9 @@ class BackTestingEngine(object):
 
         self.holdings = {}  # 多空持仓
 
-        # 当前最新数据，用于模拟成交用
         self.gateway_name = u'BackTest'
 
+        # 当前最新数据，用于模拟成交用
         self.last_bar = {}  # 最新的bar
         self.last_tick = {}  # 最新tick
         self.last_dt = None  # 最新时间
@@ -158,7 +158,7 @@ class BackTestingEngine(object):
 
         # 回测计算相关
         self.use_margin = True  # 使用保证金模式（期货使用，计算保证金时，按照开仓价计算。股票是按照当前价计算）
-
+        self.force_cross = False # 强制撮合成功,不使用价格比对，一般用于模拟市价成交
         self.init_capital = 1000000  # 期初资金
         self.cur_capital = self.init_capital  # 当前资金净值
         self.net_capital = self.init_capital  # 实时资金净值（每日根据capital和持仓浮盈计算）
@@ -604,6 +604,11 @@ class BackTestingEngine(object):
         # 缺省使用保证金方式。（期货使用保证金/股票不使用保证金）
         self.use_margin = test_setting.get('use_margin', True)
 
+        if 'force_cross' in test_setting:
+            self.force_cross = test_setting.get('force_cross', False)
+            if self.force_cross:
+                self.write_log(f'使用强制撮合模式!')
+
         # 设置最大资金使用比例
         if 'percent_limit' in test_setting:
             self.write_log(u'设置最大资金使用比例:{}%'.format(test_setting.get('percent_limit')))
@@ -645,6 +650,7 @@ class BackTestingEngine(object):
             # 创建资金K线
             self.create_fund_kline(self.test_name, use_renko=test_setting.get('use_renko', False))
 
+        # 自动输出日线净值曲线图png文件
         self.is_plot_daily = test_setting.get('is_plot_daily', False)
 
         # 加载所有本地策略class
@@ -1293,8 +1299,8 @@ class BackTestingEngine(object):
                 sell_best_cross_price = tick.last_price
 
             # 判断是否会成交
-            buy_cross = order.direction == Direction.LONG and order.price >= buy_cross_price
-            sell_cross = order.direction == Direction.SHORT and order.price <= sell_cross_price
+            buy_cross = order.direction == Direction.LONG and (order.price >= buy_cross_price or self.force_cross)
+            sell_cross = order.direction == Direction.SHORT and (order.price <= sell_cross_price or self.force_cross)
 
             # 如果发生了成交
             if buy_cross or sell_cross:
@@ -1321,9 +1327,9 @@ class BackTestingEngine(object):
                 # 2. 假设在上一根K线结束(也是当前K线开始)的时刻，策略发出的委托为限价105
                 # 3. 则在实际中的成交价会是100而不是105，因为委托发出时市场的最优价格是100
                 if buy_cross:
-                    trade_price = min(order.price, buy_best_cross_price)
+                    trade_price = min(order.price, buy_best_cross_price) if not self.force_cross else order.price
                 else:
-                    trade_price = max(order.price, sell_best_cross_price)
+                    trade_price = max(order.price, sell_best_cross_price) if not self.force_cross else order.price
 
                 # renko bar较为特殊，使用委托价进行成交
                 if trade.vt_symbol.startswith('future_renko'):

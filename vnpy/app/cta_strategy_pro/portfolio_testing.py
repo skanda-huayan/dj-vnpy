@@ -160,6 +160,12 @@ class PortfolioTestingEngine(BackTestingEngine):
         self.use_pkb2 = test_setting.get('use_pkb2', True)
         if self.use_tq:
             self.use_pkb2 = False
+            self.output(f'使用天勤数据')
+
+        if self.use_pkb2:
+            self.output(f'使用pkb2压缩格式')
+        else:
+            self.output(f'使用csv文件格式')
 
     def prepare_data(self, data_dict):
         """
@@ -282,6 +288,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                     bar.low_time = bar_data.get('low_time', None)  # 最后一次进入低位区域的时间
                     bar.high_time = bar_data.get('high_time', None)  # 最后一次进入高位区域的时间
                 else:
+                    # 读取的bar是以bar结束时间作为datetime，vnpy是以bar开始时间作为bar datetime
                     bar_datetime = dt - timedelta(seconds=self.bar_interval_seconds)
 
                     bar = BarData(
@@ -400,7 +407,7 @@ class PortfolioTestingEngine(BackTestingEngine):
             return None
 
         df = pd.read_csv(file_path, encoding='gbk', parse_dates=False)
-        df.columns = ['date', 'time', 'last_price', 'volume', 'last_volume', 'open_interest',
+        df.columns = ['date', 'time', 'last_price', 'last_volume', 'volume', 'open_interest',
                       'bid_price_1', 'bid_volume_1', 'bid_price_2', 'bid_volume_2', 'bid_price_3', 'bid_volume_3',
                       'ask_price_1', 'ask_volume_1', 'ask_price_2', 'ask_volume_2', 'ask_price_3', 'ask_volume_3', 'BS']
 

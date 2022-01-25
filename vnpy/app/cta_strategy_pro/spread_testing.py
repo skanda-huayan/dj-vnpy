@@ -323,7 +323,7 @@ class SpreadTestingEngine(BackTestingEngine):
 
         symbol, exchange = extract_vt_symbol(vt_symbol)
         underly_symbol = get_underlying_symbol(symbol)
-        exchange_folder = VN_EXCHANGE_TICKFOLDER_MAP.get(exchange.value)
+        exchange_folder = VN_EXCHANGE_TICKFOLDER_MAP.get(exchange.value,'LOCAL')
 
         if exchange == Exchange.INE:
             file_path = os.path.abspath(

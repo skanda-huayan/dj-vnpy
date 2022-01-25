@@ -63,6 +63,7 @@ class AlgoEngine(BaseEngine):
         from .algos.dma_algo import DmaAlgo
         from .algos.arbitrage_algo import ArbitrageAlgo
         from .algos.spread_algo_v2 import SpreadAlgoV2
+        from .algos.autostopwin_algo import AutoStopWinAlgo
 
         self.add_algo_template(TwapAlgo)
         self.add_algo_template(IcebergAlgo)
@@ -73,6 +74,7 @@ class AlgoEngine(BaseEngine):
         self.add_algo_template(DmaAlgo)
         self.add_algo_template(ArbitrageAlgo)
         self.add_algo_template(SpreadAlgoV2)
+        self.add_algo_template(AutoStopWinAlgo)
 
     def add_algo_template(self, template: AlgoTemplate):
         """"""
@@ -180,7 +182,8 @@ class AlgoEngine(BaseEngine):
     def stop_all(self):
         """"""
         for algo_name in list(self.algos.keys()):
-            self.stop_algo(algo_name)
+            if self.stop_algo(algo_name):
+                self.main_engine.write_log(f'{algo_name}已停止')
 
     def subscribe(self, algo: AlgoTemplate, vt_symbol: str):
         """"""
@@ -215,7 +218,7 @@ class AlgoEngine(BaseEngine):
         contract = self.main_engine.get_contract(vt_symbol)
         if not contract:
             self.write_log(f'委托下单失败，找不到合约：{vt_symbol}', algo_name=algo.algo_name)
-            return
+            return []
 
         volume = round_to(volume, contract.min_volume)
         if not volume:
