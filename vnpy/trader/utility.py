@@ -361,7 +361,14 @@ def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_l
             datas = row.split(',')
             if len(datas) > dt_index + 1:
                 try:
-                    last_dt = datetime.strptime(datas[dt_index], dt_format)
+                    s = datas[dt_index]
+                    # 检查毫秒不要超过6位长度
+                    if '.' in dt_format and '.' in s:
+                        i = s.find('.')
+                        if len(s) - i -1 > 6:
+                            len_ms = len(s) - i -1
+                            s = s[:-(len_ms-6)]
+                    last_dt = datetime.strptime(s, dt_format)
                     return last_dt
                 except:  # noqa
                     return None
