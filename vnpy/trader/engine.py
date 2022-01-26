@@ -145,14 +145,17 @@ class MainEngine:
 
         print(msg, file=sys.stderr)
 
-
     def get_gateway(self, gateway_name: str) -> BaseGateway:
         """
         Return gateway object by name.
         """
         gateway = self.gateways.get(gateway_name, None)
         if not gateway:
-            self.write_error(f"找不到底层接口：{gateway_name}")
+            # 增加兼容得写法，如果没有输入gateway_name，但当前只有一个gateway时，就使用当前gateway
+            if len(self.gateways.keys()) == 1:
+                return self.gateways.values()[0]
+
+            self.write_error(f"在{self.gateways.keys()}中找不到底层接口：{gateway_name}")
         return gateway
 
     def get_engine(self, engine_name: str) -> "BaseEngine":
