@@ -59,7 +59,10 @@ class OffsetConverter:
     def get_position_holding(self, vt_symbol: str, gateway_name: str = '') -> "PositionHolding":
         """获取持仓信息"""
         if gateway_name is None or len(gateway_name) == 0:
-            contract = self.main_engine.get_contract(vt_symbol)
+            if len(self.main_engine.gateways.keys()) == 1:
+                gateway_name = list(self.main_engine.gateways.keys())[0]
+            else:
+                contract = self.main_engine.get_contract(vt_symbol)
             if contract:
                 gateway_name = contract.gateway_name
 

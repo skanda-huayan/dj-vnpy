@@ -447,6 +447,16 @@ class TickCombiner(object):
                 u'leg2:{0}跌停{1}，不合成价差Tick'.format(self.last_leg2_tick.vt_symbol, self.last_leg2_tick.ask_price_1))
             return
 
+        # 忽略买卖价格差距过大的tick
+        if self.last_leg1_tick.ask_price_1 > 5 * self.last_leg1_tick.bid_price_1 > 10:
+            self.gateway.write_log(u'leg1:{0}买卖价格差距过大{1} {2}，不合成价差Tick'.format(
+                self.last_leg1_tick.vt_symbol, self.last_leg1_tick.ask_price_1, self.last_leg1_tick.bid_price_1))
+            return
+        if self.last_leg2_tick.ask_price_1 > 5 * self.last_leg2_tick.bid_price_1 > 10:
+            self.gateway.write_log(u'leg2:{0}买卖价格差距过大{1} {2}，不合成价差Tick'.format(
+                self.last_leg2_tick.vt_symbol, self.last_leg2_tick.ask_price_1, self.last_leg2_tick.bid_price_1))
+            return
+
         if self.trading_day != tick.trading_day:
             self.trading_day = tick.trading_day
             self.spread_high = None

@@ -42,7 +42,7 @@ from vnpy.trader.event import (
 )
 from vnpy.trader.constant import Direction, Exchange, Status
 from vnpy.trader.engine import BaseEngine, MainEngine
-from vnpy.trader.utility import get_trading_date, load_json, save_json
+from vnpy.trader.utility import get_trading_date, load_json, save_json,print_dict
 from vnpy.data.mongo.mongo_data import MongoData
 
 # 入库
@@ -487,7 +487,7 @@ class AccountRecorder(BaseEngine):
             price = self.main_engine.get_price(pos.vt_symbol)
             if price:
                 data.update({'cur_price': price})
-
+        # self.write_log('update position:{}'.format(print_dict(data)))
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_POSITION_COL, fld=fld, data=data)
 
     def update_strategy_snapshot(self, event: Event):
@@ -570,7 +570,7 @@ class AccountRecorder(BaseEngine):
         pos_data = copy.copy(data)
         pos_data.update({'account_id': pos_data.get('accountid')})
         pos_data.update({'datetime': dt.strftime("%Y-%m-%d %H:%M:%S")})
-
+        self.write_log(f'stratgy_pos event:{print_dict(pos_data)}')
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_STRATEGY_POS_COL, fld=fld, data=pos_data)
 
     def process_gw_error(self, event: Event):

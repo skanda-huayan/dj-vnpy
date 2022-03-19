@@ -963,6 +963,47 @@ class CtpTdApi(TdApi):
         """"""
         self.gateway.write_error("交易撤单失败", error)
 
+    def onRspParkedOrderInsert(self, data: dict, error: dict, reqid: int, last: bool):
+        """"""
+        self.gateway.write_log('预埋单回报')
+
+        order_ref = data["OrderRef"]
+        orderid = f"{self.frontid}_{self.sessionid}_{order_ref}"
+
+        symbol = data["InstrumentID"]
+        exchange = symbol_exchange_map[symbol]
+
+        order_type = OrderType.LIMIT
+        if data["OrderPriceType"] == THOST_FTDC_OPT_LimitPrice and data["TimeCondition"] == THOST_FTDC_TC_IOC:
+            if data["VolumeCondition"] == THOST_FTDC_VC_AV:
+                order_type = OrderType.FAK
+            elif data["VolumeCondition"] == THOST_FTDC_VC_CV:
+                order_type = OrderType.FOK
+
+        if data["OrderPriceType"] == THOST_FTDC_OPT_AnyPrice:
+            order_type = OrderType.MARKET
+
+        order = OrderData(
+            symbol=symbol,
+            exchange=exchange,
+            accountid=self.accountid,
+            orderid=orderid,
+            type=order_type,
+            direction=DIRECTION_CTP2VT[data["Direction"]],
+            offset=OFFSET_CTP2VT.get(data["CombOffsetFlag"], Offset.NONE),
+            price=data["LimitPrice"],
+            volume=data["VolumeTotalOriginal"],
+            status=Status.REJECTED,
+            gateway_name=self.gateway_name
+        )
+        self.gateway.on_order(order)
+
+        # self.gateway.write_error("交易委托失败", error)
+
+    def onRspParkedOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
+        """"""
+        self.gateway.write_error("预埋单交易撤单失败", error)
+
     def onRspQueryMaxOrderVolume(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
         pass
@@ -1424,7 +1465,34 @@ class CtpTdApi(TdApi):
             ctp_req["VolumeCondition"] = THOST_FTDC_VC_CV
 
         self.reqid += 1
-        self.reqOrderInsert(ctp_req, self.reqid)
+        dt = datetime.now()
+        use_packed = False
+        if 3 < dt.hour < 8 or 15 < dt.hour < 20:
+            use_packed = True
+        else:
+            if dt.hour in [8,20] and dt.minute <55:
+                use_packed = True
+            if req.exchange != Exchange.CFFEX:
+                if dt.hour == 10 and 15< dt.minute<30:
+                    use_packed = True
+                if dt.hour == 11 and dt.minute > 30:
+                    use_packed = True
+                if dt.hour == 12:
+                    use_packed = True
+                if dt.hour == 13 and dt.minute < 30:
+                    use_packed = True
+            else:
+                if dt.hour == 9 and dt.minute < 25:
+                    use_packed = True
+                if dt.hour == 11 and dt.minute > 30:
+                    use_packed = True
+                if dt.hour == 12:
+                    use_packed = True
+        if use_packed:
+            self.gateway.write_log(f'使用预埋单下单')
+            self.reqParkedOrderInsert(ctp_req, self.reqid)
+        else:
+            self.reqOrderInsert(ctp_req, self.reqid)
 
         orderid = f"{self.frontid}_{self.sessionid}_{self.order_ref}"
         order = req.create_order_data(orderid, self.gateway_name)

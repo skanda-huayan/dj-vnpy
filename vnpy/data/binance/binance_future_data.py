@@ -259,6 +259,7 @@ class BinanceFutureData(RestClient):
         contracts = load_json(f, auto_save=False)
         return contracts
 
+
     def save_contracts(self):
         """保存合约配置"""
         contracts = self.get_contracts()

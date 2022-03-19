@@ -20,7 +20,7 @@ from ..event import (
     EVENT_ACCOUNT,
     EVENT_LOG
 )
-from ..object import OrderRequest, SubscribeRequest
+from ..object import OrderRequest, SubscribeRequest,LogData
 from ..utility import load_json, save_json
 from ..setting import SETTING_FILENAME, SETTINGS
 
@@ -646,6 +646,30 @@ class TradingWidget(QtWidgets.QWidget):
         cancel_button = QtWidgets.QPushButton("全撤")
         cancel_button.clicked.connect(self.cancel_all)
 
+        algo_stop_button = QtWidgets.QPushButton("全停算法")
+        algo_stop_button.clicked.connect(self.stop_algo)
+
+        hbox_nomal = QtWidgets.QHBoxLayout()
+        hbox_nomal.addWidget(send_button)
+        hbox_nomal.addWidget(cancel_button)
+        hbox_nomal.addWidget(algo_stop_button)
+
+        algo_button = QtWidgets.QPushButton("算法单")
+        algo_button.clicked.connect(self.send_algo)
+
+        self.win_pips = QtWidgets.QLineEdit()
+        self.win_pips.setText('10')
+        self.stop_pips = QtWidgets.QLineEdit()
+        self.stop_pips.setText('5')
+        hbox_algo = QtWidgets.QHBoxLayout()
+        win_lable = QtWidgets.QLabel("止盈跳")
+        hbox_algo.addWidget(win_lable)
+        hbox_algo.addWidget(self.win_pips)
+        stop_lable = QtWidgets.QLabel("止损跳")
+        hbox_algo.addWidget(stop_lable)
+        hbox_algo.addWidget(self.stop_pips)
+        hbox_algo.addWidget(algo_button)
+
         self.checkFixed = QtWidgets.QCheckBox("价格")  # 价格固定选择框
 
         form1 = QtWidgets.QFormLayout()
@@ -658,8 +682,8 @@ class TradingWidget(QtWidgets.QWidget):
         form1.addRow(self.checkFixed, self.price_line)
         form1.addRow("数量", self.volume_line)
         form1.addRow("接口", self.gateway_combo)
-        form1.addRow(send_button)
-        form1.addRow(cancel_button)
+        form1.addRow(hbox_nomal)
+        form1.addRow(hbox_algo)
 
         # Market depth display area
         bid_color = "rgb(255,174,201)"
@@ -851,6 +875,75 @@ class TradingWidget(QtWidgets.QWidget):
         self.ap3_label.setText("")
         self.ap4_label.setText("")
         self.ap5_label.setText("")
+
+    def stop_algo(self) -> None:
+
+        if not self.main_engine.algo_engine:
+            QtWidgets.QMessageBox.critical(self, "算法引擎未启动", "请先启动算法引擎")
+            return
+        try:
+            self.main_engine.algo_engine.stop_all()
+        except Exception as ex:
+            QtWidgets.QMessageBox.critical(self, f"算法引擎异常{str(ex)}", "请查看详细日志")
+
+
+    def send_algo(self) ->None:
+        """启动算法"""
+        if not self.main_engine.algo_engine:
+            QtWidgets.QMessageBox.critical(self, "算法引擎未启动", "请先启动算法引擎")
+            return
+        template_name = 'AutoStopWinAlgo'
+        algo_template = self.main_engine.algo_engine.algo_templates.get(template_name,None)
+        if algo_template is None:
+            QtWidgets.QMessageBox.critical(self, f"算法[{template_name}]不存在", "请先部署算法")
+            return
+        symbol = str(self.symbol_line.text())
+        if not symbol:
+            QtWidgets.QMessageBox.critical(self, "委托失败", "请输入合约代码")
+            return
+
+        volume_text = str(self.volume_line.text())
+        if not volume_text:
+            QtWidgets.QMessageBox.critical(self, "委托失败", "请输入委托数量")
+            return
+        volume = float(volume_text)
+
+        price_text = str(self.price_line.text())
+        if not price_text:
+            price = 0
+        else:
+            price = float(price_text)
+
+        exchange = Exchange(str(self.exchange_combo.currentText()))
+
+        win_pips = str(self.win_pips.text())
+        if int(win_pips) <=0:
+            QtWidgets.QMessageBox.critical(self, "止盈点数须大于0", "请输入正确止盈点数")
+            return
+        stop_pips = str(self.stop_pips.text())
+        if int(stop_pips) <= 0:
+            QtWidgets.QMessageBox.critical(self, "止损点数须大于0", "请输入正确止损点数")
+            return
+        offset = Offset(str(self.offset_combo.currentText()))
+        if offset != Offset.OPEN:
+            QtWidgets.QMessageBox.critical(self, "算法只支持开仓", "请选择开仓方式")
+            return
+
+        setting = {
+            "vt_symbol": f"{symbol}.{exchange.value}",
+            "direction": Direction(str(self.direction_combo.currentText())),
+            "open_price": price,
+            "win_pips": int(win_pips),
+            "stop_pips": int(stop_pips),
+            "volume": volume,
+            "near_pips": 2,  # 价格接近多少个跳动才开始挂单（开仓）
+            "offset": offset
+        }
+        algo = algo_template.new(self.main_engine.algo_engine, setting)
+        algo.start()
+        self.main_engine.algo_engine.algos[algo.algo_name] = algo
+
+        self.main_engine.write_log(msg=f'算法{algo.algo_name}启动')
 
     def send_order(self) -> None:
         """

@@ -63,6 +63,8 @@ from vnpy.trader.utility import (
 
 from vnpy.trader.util_logger import setup_logger, logging
 from vnpy.trader.util_wechat import send_wx_msg
+from vnpy.data.mongo.mongo_data import MongoData
+from vnpy.trader.setting import SETTINGS
 from vnpy.trader.converter import OffsetConverter
 
 from .base import (
@@ -120,6 +122,9 @@ class CtaEngine(BaseEngine):
         #  "trade_2_wx": true  # 是否交易记录转发至微信通知
         # "event_log: false    # 是否转发日志到event bus，显示在图形界面
         # "snapshot2file": false # 是否保存切片到文件
+        #  "compare_pos": false # False，强制不进行 账号 <=> 引擎实例 得仓位比对。（一般分布式RPC运行时，其他得实例都不进行比对）
+        #  "get_pos_from_db": false  # True，使用数据库得 策略<=>pos 数据作为比较（一般分布式RPC运行时，其中一个使用即可）; False，使用当前引擎实例得 策略.pos进行比对
+
         self.engine_config = {}
         # 是否激活 write_log写入event bus(比较耗资源）
         self.event_log = False
@@ -170,6 +175,26 @@ class CtaEngine(BaseEngine):
         self.load_strategy_setting()
 
         self.write_log("CTA策略引擎初始化成功")
+
+        if self.engine_config.get('get_pos_from_db', False):
+            self.write_log(f'激活数据库策略仓位比对模式')
+            self.init_mongo_data()
+
+    def init_mongo_data(self):
+        """初始化hams数据库"""
+        host = SETTINGS.get('hams.host', 'localhost')
+        port = SETTINGS.get('hams.port', 27017)
+        self.write_log(f'初始化hams数据库连接:{host}:{port}')
+        try:
+            # Mongo数据连接客户端
+            self.mongo_data = MongoData(host=host, port=port)
+
+            if self.mongo_data and self.mongo_data.db_has_connected:
+                self.write_log(f'连接成功')
+            else:
+                self.write_error(f'HAMS数据库{host}:{port}连接异常.')
+        except Exception as ex:
+            self.write_error(f'HAMS数据库{host}:{port}连接异常.{str(ex)}')
 
     def close(self):
         """停止所属有的策略"""
@@ -1713,7 +1738,8 @@ class CtaEngine(BaseEngine):
 
                             pos_list.append(leg1_pos)
                             pos_list.append(leg2_pos)
-
+                        else:
+                            pos_list.append(pos)
             except Exception as ex:
                 self.write_error(f'分解SPD失败:{str(ex)}')
 
@@ -1748,6 +1774,33 @@ class CtaEngine(BaseEngine):
             strategy_pos_list.append(d)
 
         return strategy_pos_list
+
+    def get_all_strategy_pos_from_hams(self):
+        """
+        获取hams中该账号下所有策略仓位明细
+        """
+        strategy_pos_dict = {}
+        if not self.mongo_data:
+            self.init_mongo_data()
+
+        if self.mongo_data and self.mongo_data.db_has_connected:
+            filter = {'account_id': self.engine_config.get('accountid', '-')}
+
+            pos_list = self.mongo_data.db_query(
+                db_name='Account',
+                col_name='today_strategy_pos',
+                filter_dict=filter
+            )
+            for pos in pos_list:
+                s_name = pos.get('strategy_name', None)
+                if s_name:
+                    if s_name not in strategy_pos_dict:
+                        strategy_pos_dict[s_name] = pos
+                        continue
+                    if pos.get('datetime', '') > strategy_pos_dict[s_name].get('datetime', ''):
+                        strategy_pos_dict[s_name] = pos
+
+        return list(strategy_pos_dict.values())
 
     def get_strategy_class_parameters(self, class_name: str):
         """
@@ -1810,9 +1863,14 @@ class CtaEngine(BaseEngine):
 
         self.write_log(u'开始对比账号&策略的持仓')
 
-        # 获取当前策略得持仓
-        if len(strategy_pos_list) == 0:
-            strategy_pos_list = self.get_all_strategy_pos()
+        # 获取hams数据库中所有运行实例得策略
+        if self.engine_config.get("get_pos_from_db", False):
+            strategy_pos_list = self.get_all_strategy_pos_from_hams()
+        else:
+            # 获取当前实例运行策略得持仓
+            if len(strategy_pos_list) == 0:
+                strategy_pos_list = self.get_all_strategy_pos()
+
         self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
 
         none_strategy_pos = self.get_none_strategy_pos_list()
@@ -1888,53 +1946,44 @@ class CtaEngine(BaseEngine):
         pos_compare_result = ''
         # 精简输出
         compare_info = ''
-        diff_pos_dict = {}
+        diff_pos_dict = {}  # 短合约: {'long_diff':xx, 'short_diff',xx)
+
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
             symbol_pos = compare_pos.pop(vt_symbol, {})
+            #
+            # # 股指期货: 帐号多/空轧差， vs 策略多空轧差 是否一致；
+            # # 其他期货：帐号多单 vs 除了多单， 空单 vs 空单
+            # if vt_symbol.endswith(".CFFEX"):
+            #     diff_match = (symbol_pos.get('账号多单', 0) - symbol_pos.get('账号空单', 0)) == (
+            #             symbol_pos.get('策略多单', 0) - symbol_pos.get('策略空单', 0))
+            #     pos_match = symbol_pos.get('账号空单', 0) == symbol_pos.get('策略空单', 0) and \
+            #                 symbol_pos.get('账号多单', 0) == symbol_pos.get('策略多单', 0)
+            #     match = diff_match
+            #     # 轧差一致，帐号/策略持仓不一致
+            #     if diff_match and not pos_match:
+            #         if symbol_pos.get('账号多单', 0) > symbol_pos.get('策略多单', 0):
+            #             self.write_log('{}轧差持仓：多:{},空:{} 大于 策略持仓 多:{},空:{}'.format(
+            #                 vt_symbol,
+            #                 symbol_pos.get('账号多单', 0),
+            #                 symbol_pos.get('账号空单', 0),
+            #                 symbol_pos.get('策略多单', 0),
+            #                 symbol_pos.get('策略空单', 0)
+            #             ))
+            #             diff_pos_dict.update({vt_symbol: {"long": symbol_pos.get('账号多单', 0) - symbol_pos.get('策略多单', 0),
+            #                                               "short": symbol_pos.get('账号空单', 0) - symbol_pos.get('策略空单',
+            #                                                                                                   0)}})
+            # else:
+            match = round(symbol_pos.get('账号空单', 0), 7) == round(symbol_pos.get('策略空单', 0), 7) and \
+                    round(symbol_pos.get('账号多单', 0), 7) == round(symbol_pos.get('策略多单', 0), 7)
 
-            d_long = {
-                'account_id': self.engine_config.get('accountid', '-'),
-                'vt_symbol': vt_symbol,
-                'direction': Direction.LONG.value,
-                'strategy_list': symbol_pos.get('多单策略', [])}
-
-            d_short = {
-                'account_id': self.engine_config.get('accountid', '-'),
-                'vt_symbol': vt_symbol,
-                'direction': Direction.SHORT.value,
-                'strategy_list': symbol_pos.get('空单策略', [])}
-
-            # 股指期货: 帐号多/空轧差， vs 策略多空轧差 是否一致；
-            # 其他期货：帐号多单 vs 除了多单， 空单 vs 空单
-            if vt_symbol.endswith(".CFFEX"):
-                diff_match = (symbol_pos.get('账号多单', 0) - symbol_pos.get('账号空单', 0)) == (
-                        symbol_pos.get('策略多单', 0) - symbol_pos.get('策略空单', 0))
-                pos_match = symbol_pos.get('账号空单', 0) == symbol_pos.get('策略空单', 0) and \
-                            symbol_pos.get('账号多单', 0) == symbol_pos.get('策略多单', 0)
-                match = diff_match
-                # 轧差一致，帐号/策略持仓不一致
-                if diff_match and not pos_match:
-                    if symbol_pos.get('账号多单', 0) > symbol_pos.get('策略多单', 0):
-                        self.write_log('{}轧差持仓：多:{},空:{} 大于 策略持仓 多:{},空:{}'.format(
-                            vt_symbol,
-                            symbol_pos.get('账号多单', 0),
-                            symbol_pos.get('账号空单', 0),
-                            symbol_pos.get('策略多单', 0),
-                            symbol_pos.get('策略空单', 0)
-                        ))
-                        diff_pos_dict.update({vt_symbol: {"long": symbol_pos.get('账号多单', 0) - symbol_pos.get('策略多单', 0),
-                                                          "short": symbol_pos.get('账号空单', 0) - symbol_pos.get('策略空单',
-                                                                                                              0)}})
-            else:
-                match = round(symbol_pos.get('账号空单', 0), 7) == round(symbol_pos.get('策略空单', 0), 7) and \
-                        round(symbol_pos.get('账号多单', 0), 7) == round(symbol_pos.get('策略多单', 0), 7)
             # 多空都一致
             if match:
                 msg = u'{}多空都一致.{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
                 self.write_log(msg)
                 compare_info += msg
             else:
+                # 多空不一致
                 pos_compare_result += '\n{}: '.format(vt_symbol)
                 # 判断是多单不一致？
                 diff_long_volume = round(symbol_pos.get('账号多单', 0), 7) - round(symbol_pos.get('策略多单', 0), 7)
@@ -1946,8 +1995,16 @@ class CtaEngine(BaseEngine):
                                 symbol_pos.get('策略多单'))
 
                     pos_compare_result += msg
-                    self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
+                    self.write_log(u'{}不一致:{}'.format(vt_symbol, msg))
                     compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
+
+                    # 登记短合约得差别
+                    underlying_symbol = get_underlying_symbol(vt_symbol.split('.')[0])
+                    diff_pos = diff_pos_dict.get(underlying_symbol, {})
+                    diff_pos.update({'多单': diff_long_volume + diff_pos.get('多单', 0)})
+                    diff_pos_dict[underlying_symbol] = diff_pos
+
+                    # 自动平衡
                     if auto_balance:
                         self.balance_pos(vt_symbol, Direction.LONG, diff_long_volume)
 
@@ -1961,13 +2018,24 @@ class CtaEngine(BaseEngine):
                                 symbol_pos.get('空单策略'),
                                 symbol_pos.get('策略空单'))
                     pos_compare_result += msg
-                    self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
+                    self.write_log(u'{}不一致:{}'.format(vt_symbol, msg))
                     compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
+
+                    # 登记短合约得差别
+                    underlying_symbol = get_underlying_symbol(vt_symbol.split('.')[0])
+                    diff_pos = diff_pos_dict.get(underlying_symbol, {})
+                    diff_pos.update({'空单': diff_short_volume + diff_pos.get('空单', 0)})
+                    diff_pos_dict[underlying_symbol] = diff_pos
+
+                    # 自动平衡仓位
                     if auto_balance:
                         self.balance_pos(vt_symbol, Direction.SHORT, diff_short_volume)
 
+        # 统计所有轧差偏差得
+        diff_underlying = sum([d.get('多单', 0) - d.get('空单', 0) for d in list(diff_pos_dict.values())])
+
         # 不匹配，输入到stdErr通道
-        if pos_compare_result != '':
+        if pos_compare_result != '' and diff_underlying != 0:
             msg = u'账户{}持仓不匹配: {}' \
                 .format(self.engine_config.get('accountid', '-'),
                         pos_compare_result)
@@ -1982,9 +2050,6 @@ class CtaEngine(BaseEngine):
             return True, compare_info + ret_msg
         else:
             self.write_log(u'账户持仓与策略一致')
-            if len(diff_pos_dict) > 0:
-                for k, v in diff_pos_dict.items():
-                    self.write_log(f'{k} 存在大于策略的轧差持仓:{v}')
             return True, compare_info
 
     def balance_pos(self, vt_symbol, direction, volume):

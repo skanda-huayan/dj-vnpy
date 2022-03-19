@@ -181,8 +181,10 @@ class MongoData(object):
         return []
 
     def db_query_by_sort(self, db_name, col_name, filter_dict, sort_name, sort_type, limitNum=0):
-        """从MongoDB中读取数据，d是查询要求，sortName是排序的字段,sortType是排序类型
-          返回的是数据库查询的指针"""
+        """
+        从MongoDB中读取数据，d是查询要求，sortName是排序的字段,sortType是排序类型,1正序，-1倒序
+          返回的是数据库查询的指针
+          """
         try:
             if self.db_client:
                 db = self.db_client[db_name]

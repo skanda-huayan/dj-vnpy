@@ -153,7 +153,7 @@ class MainEngine:
         if not gateway:
             # 增加兼容得写法，如果没有输入gateway_name，但当前只有一个gateway时，就使用当前gateway
             if len(self.gateways.keys()) == 1:
-                return self.gateways.values()[0]
+                return list(self.gateways.values())[0]
 
             self.write_error(f"在{self.gateways.keys()}中找不到底层接口：{gateway_name}")
         return gateway

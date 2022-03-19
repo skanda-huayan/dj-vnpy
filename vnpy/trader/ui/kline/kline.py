@@ -1374,7 +1374,10 @@ class KLineWidget(KeyWraper):
             # 标记时间
             t_value = df_markup['datetime'].loc[idx]
             if not isinstance(t_value, datetime) and isinstance(t_value, str):
-                t_value = datetime.strptime(t_value, '%Y-%m-%d %H:%M:%S')
+                if '.' in t_value:
+                    t_value = datetime.strptime(t_value, '%Y-%m-%d %H:%M:%S.%f')
+                else:
+                    t_value = datetime.strptime(t_value, '%Y-%m-%d %H:%M:%S')
 
             price = df_markup['price'].loc[idx]
             markup_text = df_markup['markup'].loc[idx]

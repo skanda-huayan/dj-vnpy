@@ -13,7 +13,7 @@ from logging import INFO, ERROR
 from datetime import datetime
 from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Color, Exchange
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
-from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol
+from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol,print_dict
 
 from .base import StopOrder, EngineType
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade, LOCK_GRID
@@ -75,7 +75,7 @@ class CtaTemplate(ABC):
         """
         class_parameters = {}
         for name in cls.parameters:
-            class_parameters[name] = getattr(cls, name)
+            class_parameters[name] = getattr(cls, name,"")
         return class_parameters
 
     def get_parameters(self):
@@ -84,7 +84,7 @@ class CtaTemplate(ABC):
         """
         strategy_parameters = {}
         for name in self.parameters:
-            strategy_parameters[name] = getattr(self, name)
+            strategy_parameters[name] = getattr(self, name, "")
         return strategy_parameters
 
     def get_variables(self):
@@ -186,6 +186,31 @@ class CtaTemplate(ABC):
         Callback of stop order update.
         """
         pass
+
+    def exist_order(self, vt_symbol, direction, offset):
+        """
+        是否存在相同得委托
+        :param vt_symbol:
+        :param direction:
+        :param offset:
+        :return:
+        """
+        if len(self.active_orders) == 0:
+            self.write_log(f'当前活动订单数量为零。查询条件:{vt_symbol}，方向:{direction.value}, 开平:{offset.value}')
+            return False
+
+        for orderid, order in self.active_orders.items():
+            # self.write_log(f'当前活动订单:\n{print_dict(order)}')
+            if offset != Offset.OPEN:  # 平昨、平今、平仓
+                offset_cond = order['offset'] != Offset.OPEN
+            else:   # 开仓
+                offset_cond = order['offset'] == offset
+
+            if order['vt_symbol'] == vt_symbol and order['direction'] == direction and offset_cond:
+                self.write_log(f'存在相同活动订单。查询条件:{vt_symbol}，方向:{direction.value}, 开平:{offset.value}')
+                return True
+
+        return False
 
     def buy(self, price: float, volume: float, stop: bool = False, lock: bool = False,
             vt_symbol: str = '', order_type: OrderType = OrderType.LIMIT,

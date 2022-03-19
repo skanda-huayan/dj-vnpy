@@ -100,7 +100,8 @@ class IndexTickPublisherV2(BaseEngine):
                                  exchange=conf.get('exchange', 'x_fanout_idx_tick'))
             self.write_log(f'创建发布器成功')
         except Exception as ex:
-            self.write_log(u'创建tick发布器异常:{}'.format(str(ex)))
+            self.write_error(u'创建tick发布器异常:{}'.format(str(ex)))
+            self.write_error(traceback.format_exc())
 
     # ----------------------------------------------------------------------
     def registerEvent(self):

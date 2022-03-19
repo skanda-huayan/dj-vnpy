@@ -263,12 +263,25 @@ class TdxStockData(object):
 
         return results
 
-    def get_name(self, code, market_id):
-        symbol_info = self.symbol_dict.get(f'{code}_{market_id}')
-        if symbol_info:
-            return symbol_info.get('name', code)
+    def get_name(self, symbol, market_id=None):
+        """
+        获取名称
+        :param symbol:  代码  或者 代码.交易所
+        :param market_id: 如果存在代码.交易所时，不使用该值
+        :return:
+        """
+        if '.' in symbol:
+            symbol, exchange = symbol.split('.')
+            if exchange == Exchange.SSE.value:
+                market_id = 1
+            elif exchange == Exchange.SZSE.value:
+                market_id = 0
 
-        return code
+        symbol_info = self.symbol_dict.get(f'{symbol}_{market_id}')
+        if symbol_info:
+            return symbol_info.get('name', symbol)
+
+        return symbol
 
     # ----------------------------------------------------------------------
     def get_bars(self,

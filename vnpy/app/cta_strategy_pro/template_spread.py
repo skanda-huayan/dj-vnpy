@@ -7,7 +7,7 @@ from copy import copy
 import bz2
 import pickle
 import zlib
-from vnpy.trader.utility import append_data, extract_vt_symbol
+from vnpy.trader.utility import append_data, extract_vt_symbol, get_months_diff
 from .template import (
     CtaPosition,
     CtaGridTrade,
@@ -17,6 +17,7 @@ from .template import (
     datetime,
     Offset,
     Exchange,
+    TickData,
     OrderType,
     OrderData,
     TradeData,
@@ -28,8 +29,9 @@ from .template import (
 class CtaSpreadTemplate(CtaTemplate):
     """CTA套利模板"""
 
-    activate_fak = False
-    order_type = OrderType.LIMIT
+    activate_fak = False  # 是否使用FAK得下单、追单方式
+    order_type = OrderType.LIMIT  # 缺省下单方式，是使用限价单
+    activate_lock = False  # 对某些日内平今手续费较高得合约，采用锁仓方式
     act_vt_symbol = ""  # 主动腿合约
     pas_vt_symbol = ""  # 被动腿合约
     act_symbol = ""
@@ -45,7 +47,6 @@ class CtaSpreadTemplate(CtaTemplate):
     force_trading_close = False  # 强制平仓
     history_orders = {}
 
-
     # 逻辑过程日志
     dist_fieldnames = ['datetime', 'symbol', 'volume', 'price',
                        'operation', 'signal', 'stop_price', 'target_price',
@@ -55,7 +56,12 @@ class CtaSpreadTemplate(CtaTemplate):
         """"""
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
-        self.parameters.append('activate_fak')
+        if 'activate_fak' not in self.parameters:
+            self.parameters.append('activate_fak')
+        if 'activate_lock' not in self.parameters:
+            self.parameters.append('activate_lock')
+        if 'cancel_seconds' not in self.parameters:
+            self.parameters.append('cancel_seconds')
 
         # 基础组件
         self.position = CtaPosition(strategy=self)
@@ -84,6 +90,9 @@ class CtaSpreadTemplate(CtaTemplate):
         self.act_margin_rate = None
         self.pas_margin_rate = None
 
+        self.diff_months = 0  # 主动腿和被动腿相隔月数量
+
+        self.spd_pos = None  # 套利合约的holding pos
         self.act_pos = None  # 主动合约得holding pos
         self.pas_pos = None  # 被动合约得holding pos
 
@@ -106,6 +115,9 @@ class CtaSpreadTemplate(CtaTemplate):
         self.pas_symbol_size = self.cta_engine.get_size(self.pas_vt_symbol)
         self.act_margin_rate = self.cta_engine.get_margin_rate(self.act_vt_symbol)
         self.pas_margin_rate = self.cta_engine.get_margin_rate(self.pas_vt_symbol)
+
+        # 计算主动腿与被动腿得相隔月
+        self.diff_months = get_months_diff(self.act_symbol, self.pas_symbol)
 
         # 实盘采用FAK
         if not self.backtesting and self.activate_fak:
@@ -378,7 +390,6 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'当前持仓:{}'.format(pos_list))
         return pos_list
 
-
     def on_start(self):
         """启动策略（必须由用户继承实现）"""
         # 订阅主动腿/被动腿合约
@@ -588,7 +599,7 @@ class CtaSpreadTemplate(CtaTemplate):
             # 更新开仓均价/数量
             if trade.vt_symbol == self.act_vt_symbol:
                 opened_price = grid.snapshot.get('act_open_price', 0)
-                opened_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+                opened_volume = grid.snapshot.get('act_open_volume')
                 act_open_volume = opened_volume + trade.volume
                 act_open_price = (opened_price * opened_volume + trade.price * trade.volume) / act_open_volume
 
@@ -600,7 +611,7 @@ class CtaSpreadTemplate(CtaTemplate):
 
             elif trade.vt_symbol == self.pas_vt_symbol:
                 opened_price = grid.snapshot.get('pas_open_price', 0)
-                opened_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
+                opened_volume = grid.snapshot.get('pas_open_volume', 0)
                 pas_open_volume = opened_volume + trade.volume
                 pas_open_price = (opened_price * opened_volume + trade.price * trade.volume) / pas_open_volume
 
@@ -614,27 +625,38 @@ class CtaSpreadTemplate(CtaTemplate):
             # 更新平仓均价/数量
             if trade.vt_symbol == self.act_vt_symbol:
                 closed_price = grid.snapshot.get('act_close_price', 0)
-                closed_volume = grid.snapshot.get('act_close_volume', grid.volume * self.act_vol_ratio)
+                closed_volume = grid.snapshot.get('act_close_volume',0)
+                opened_volume = grid.snapshot.get('act_open_volume')
+
                 act_close_volume = closed_volume + trade.volume
+                opened_volume = opened_volume - trade.volume
+                if opened_volume < 0:
+                    debug =1
                 act_close_price = (closed_price * closed_volume + trade.price * trade.volume) / act_close_volume
 
                 self.write_log(f'{trade.vt_symbol} 平仓均价{closed_price} => {act_close_price},'
                                f' 平仓手数:{closed_volume}=>{act_close_volume}')
                 grid.snapshot.update({'act_close_price': act_close_price,
                                       'act_close_volume': act_close_volume,
-                                      'act_vt_symbol': self.act_vt_symbol})
+                                      'act_vt_symbol': self.act_vt_symbol,
+                                      'act_open_volume':opened_volume})
 
             elif trade.vt_symbol == self.pas_vt_symbol:
                 closed_price = grid.snapshot.get('pas_close_price', 0)
-                closed_volume = grid.snapshot.get('pas_close_volume', grid.volume * self.pas_vol_ratio)
-                pas_open_volume = closed_volume + trade.volume
-                pas_open_price = (closed_price * closed_volume + trade.price * trade.volume) / pas_open_volume
+                closed_volume = grid.snapshot.get('pas_close_volume', 0)
+                opened_volume = grid.snapshot.get('pas_open_volume')
+                pas_closed_volume = closed_volume + trade.volume
+                opened_volume = opened_volume - trade.volume
+                if opened_volume < 0:
+                    debug = 1
+                pas_open_price = (closed_price * closed_volume + trade.price * trade.volume) / pas_closed_volume
 
                 self.write_log(f'{trade.vt_symbol} 平仓均价{closed_price} => {pas_open_price},'
-                               f' 平仓手数:{closed_volume}=>{pas_open_volume}')
+                               f' 平仓手数:{closed_volume}=>{pas_closed_volume}')
                 grid.snapshot.update({'pas_close_price': pas_open_price,
-                                      'pas_close_volume': pas_open_volume,
-                                      'pas_vt_symbol': self.pas_vt_symbol})
+                                      'pas_close_volume': pas_closed_volume,
+                                      'pas_vt_symbol': self.pas_vt_symbol,
+                                      'pas_open_volume': opened_volume})
 
         self.gt.save()
 
@@ -662,7 +684,6 @@ class CtaSpreadTemplate(CtaTemplate):
                 # 平仓完毕（cover， sell）
                 if order_info.get("offset", None) != Offset.OPEN:
                     grid.open_status = False
-                    grid.close_status = True
 
                     self.write_log(f'{grid.direction.value}单已平仓完毕,手数:{grid.volume}, 详细:{grid.snapshot}')
 
@@ -785,9 +806,9 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.buy(price=buy_price,
                                    volume=order_volume,
                                    vt_symbol=order_vt_symbol,
-                                   lock=order_exchange==Exchange.CFFEX,
+                                   lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                    order_type=OrderType.FAK,
-                                   order_time=self.cur_datetime,
+                                   order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                    grid=grid)
             if not vt_orderids:
                 self.write_error(u'重新提交{} {}手开多单,价格：{}，失败'.
@@ -827,9 +848,9 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.short(price=short_price,
                                      volume=order_volume,
                                      vt_symbol=order_vt_symbol,
-                                     lock=order_exchange==Exchange.CFFEX,
+                                     lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                      order_type=OrderType.FAK,
-                                     order_time=self.cur_datetime,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                      grid=grid)
 
             if not vt_orderids:
@@ -940,9 +961,9 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.cover(price=cover_price,
                                      volume=order_volume,
                                      vt_symbol=order_vt_symbol,
-                                     lock=order_exchange==Exchange.CFFEX,
+                                     lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                      order_type=OrderType.FAK,
-                                     order_time=self.cur_datetime,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                      grid=grid)
             if not vt_orderids:
                 self.write_error(u'重新提交{} {}手平空单{}失败'.format(order_vt_symbol, order_volume, cover_price))
@@ -977,9 +998,9 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.sell(price=sell_price,
                                     volume=order_volume,
                                     vt_symbol=order_vt_symbol,
-                                    lock=order_exchange==Exchange.CFFEX,
+                                    lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                     order_type=OrderType.FAK,
-                                    order_time=self.cur_datetime,
+                                    order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                     grid=grid)
 
             if not vt_orderids:
@@ -1033,7 +1054,9 @@ class CtaSpreadTemplate(CtaTemplate):
         canceled_ids = []
 
         for vt_orderid in list(self.active_orders.keys()):
-            order_info = self.active_orders[vt_orderid]
+            order_info = self.active_orders.get(vt_orderid, None)
+            if order_info is None:
+                continue
             order_vt_symbol = order_info.get('vt_symbol', self.vt_symbol)
             order_symbol, order_exchange = extract_vt_symbol(order_vt_symbol)
             order_time = order_info['order_time']
@@ -1084,9 +1107,9 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.short(price=short_price,
                                                      volume=order_volume,
                                                      vt_symbol=order_vt_symbol,
-                                                     lock=order_exchange == Exchange.CFFEX,
+                                                     lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                                      order_type=order_type,
-                                                     order_time=self.cur_datetime,
+                                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                                      grid=order_grid)
 
                             if len(vt_orderids) > 0:
@@ -1103,9 +1126,9 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.buy(price=buy_price,
                                                    volume=order_volume,
                                                    vt_symbol=order_vt_symbol,
-                                                   lock=order_exchange == Exchange.CFFEX,
+                                                   lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                                    order_type=order_type,
-                                                   order_time=self.cur_datetime,
+                                                   order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                                    grid=order_grid)
 
                             if len(vt_orderids) > 0:
@@ -1123,9 +1146,9 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.sell(price=sell_price,
                                                     volume=order_volume,
                                                     vt_symbol=order_vt_symbol,
-                                                    lock=order_exchange == Exchange.CFFEX,
+                                                    lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                                     order_type=order_type,
-                                                    order_time=self.cur_datetime,
+                                                    order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                                     grid=order_grid)
                             if len(vt_orderids) > 0:
                                 self.write_log(u'委托成功，orderids:{}'.format(vt_orderids))
@@ -1140,9 +1163,9 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.cover(price=cover_price,
                                                      volume=order_volume,
                                                      vt_symbol=order_vt_symbol,
-                                                     lock=order_exchange == Exchange.CFFEX,
+                                                     lock=order_exchange == Exchange.CFFEX or self.activate_lock,
                                                      order_type=order_type,
-                                                     order_time=self.cur_datetime,
+                                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                                      grid=order_grid)
                             if len(vt_orderids) > 0:
                                 self.write_log(u'委托成功，orderids:{}'.format(vt_orderids))
@@ -1262,11 +1285,11 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开空主动腿
         act_vt_orderids = self.short(vt_symbol=self.act_vt_symbol,
-                                     lock=self.act_exchange == Exchange.CFFEX,
+                                     lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
                                      price=self.cur_act_tick.bid_price_1,
                                      volume=grid.volume * self.act_vol_ratio,
                                      order_type=self.order_type,
-                                     order_time=self.cur_datetime,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                      grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_short，{self.act_vt_symbol}开空仓{grid.volume * self.act_vol_ratio}手失败，'
@@ -1275,11 +1298,11 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开多被动腿（FAK或者限价单）
         pas_vt_orderids = self.buy(vt_symbol=self.pas_vt_symbol,
-                                   lock=self.pas_exchange==Exchange.CFFEX,
+                                   lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
                                    price=self.cur_pas_tick.ask_price_1,
                                    volume=grid.volume * self.pas_vol_ratio,
                                    order_type=self.order_type,
-                                   order_time=self.cur_datetime,
+                                   order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                    grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_short，{self.pas_vt_symbol}开多仓{grid.volume * self.pas_vol_ratio}手失败，'
@@ -1292,7 +1315,7 @@ class CtaSpreadTemplate(CtaTemplate):
         grid.snapshot.update({"act_vt_symbol": self.act_vt_symbol, "act_open_volume": 0,
                               "pas_vt_symbol": self.pas_vt_symbol, "pas_open_volume": 0})
         grid.order_status = True
-        grid.order_datetime = self.cur_datetime
+        grid.order_time = self.cur_datetime
 
         vt_orderids = act_vt_orderids + pas_vt_orderids  # 不能用act_vt_orderids.extend(pas_vt_orderids)，它的返回值为 None，会导致没有vt_orderids
         self.write_log(u'spd short vt_order_ids：{0}'.format(vt_orderids))
@@ -1333,33 +1356,33 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开多主动腿（FAK 或者限价单）
         act_vt_orderids = self.buy(vt_symbol=self.act_vt_symbol,
-                                   lock=self.act_exchange==Exchange.CFFEX,
+                                   lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
                                    price=self.cur_act_tick.ask_price_1,
                                    volume=grid.volume * self.act_vol_ratio,
                                    order_type=self.order_type,
-                                   order_time=self.cur_datetime,
+                                   order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                    grid=grid)
         if not act_vt_orderids:
-            self.write_error(f'spd_short，{self.act_vt_symbol}开多仓{grid.volume * self.act_vol_ratio}手失败，'
+            self.write_error(f'spd_buy，{self.act_vt_symbol}开多仓{grid.volume * self.act_vol_ratio}手失败，'
                              f'委托价:{self.cur_act_tick.ask_price_1}')
             return []
 
         # 开空被动腿
         pas_vt_orderids = self.short(vt_symbol=self.pas_vt_symbol,
-                                     lock=self.pas_exchange==Exchange.CFFEX,
+                                     lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
                                      price=self.cur_pas_tick.bid_price_1,
                                      volume=grid.volume * self.pas_vol_ratio,
                                      order_type=self.order_type,
-                                     order_time=self.cur_datetime,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                      grid=grid)
         if not pas_vt_orderids:
-            self.write_error(f'spd_short，{self.pas_vt_symbol}开空仓{grid.volume * self.pas_vol_ratio}手失败，'
+            self.write_error(f'spd_buy，{self.pas_vt_symbol}开空仓{grid.volume * self.pas_vol_ratio}手失败，'
                              f'委托价:{self.cur_pas_tick.bid_price_1}')
             return []
         grid.snapshot.update({"act_vt_symbol": self.act_vt_symbol, "act_open_volume": 0,
                               "pas_vt_symbol": self.pas_vt_symbol, "pas_open_volume": 0})
         grid.order_status = True
-        grid.order_datetime = self.cur_datetime
+        grid.order_time = self.cur_datetime
         vt_orderids = act_vt_orderids + pas_vt_orderids
         self.write_log(u'spd buy vt_ordderids：{}'.format(vt_orderids))
         return vt_orderids
@@ -1401,22 +1424,23 @@ class CtaSpreadTemplate(CtaTemplate):
         pas_close_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
 
         # 检查账号持仓是否满足平仓目标
-        if self.act_pos.long_pos < act_close_volume:
-            self.write_error(f'账号 {self.act_vt_symbol} 多单持仓{self.act_pos.long_pos}'
+        if self.act_pos.long_pos < act_close_volume and not (self.act_exchange == Exchange.CFFEX or self.activate_lock):
+            self.write_error(f'[正套]平仓，账号主动腿 {self.act_vt_symbol} 多单持仓{self.act_pos.long_pos}'
                              f'今仓{self.act_pos.long_td}/昨{self.act_pos.long_yd}, 不满足{act_close_volume}')
             return []
-        if self.pas_pos.short_pos < pas_close_volume:
-            self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.short_pos}'
+        if self.pas_pos.short_pos < pas_close_volume and not (
+                self.pas_exchange == Exchange.CFFEX or self.activate_lock):
+            self.write_error(f'[正套]平仓，账号被动腿 {self.pas_vt_symbol} 多单持仓{self.pas_pos.short_pos}'
                              f'今仓{self.pas_pos.short_td}/昨{self.pas_pos.short_yd}, 不满足{act_close_volume}')
             return []
 
         # 被动腿空单平仓
         pas_vt_orderids = self.cover(vt_symbol=self.pas_vt_symbol,
-                                     lock=self.pas_exchange == Exchange.CFFEX,
+                                     lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
                                      price=self.cur_pas_tick.ask_price_1,
                                      volume=grid.volume * self.pas_vol_ratio,
                                      order_type=self.order_type,
-                                     order_time=self.cur_datetime,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                      grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_sell，{self.pas_vt_symbol}空单平仓{grid.volume * self.pas_vol_ratio}手失败，'
@@ -1425,11 +1449,11 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 主动腿多单平仓
         act_vt_orderids = self.sell(vt_symbol=self.act_vt_symbol,
-                                    lock=self.act_exchange==Exchange.CFFEX,
+                                    lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
                                     price=self.cur_act_tick.bid_price_1,
                                     volume=grid.volume * self.act_vol_ratio,
                                     order_type=self.order_type,
-                                    order_time=self.cur_datetime,
+                                    order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                     grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_sell，{self.act_vt_symbol}多单平仓{grid.volume * self.act_vol_ratio}手失败，'
@@ -1437,12 +1461,12 @@ class CtaSpreadTemplate(CtaTemplate):
             return []
 
         grid.order_status = True
-        grid.order_datetime = self.cur_datetime
+        grid.order_time = self.cur_datetime
         vt_orderids = act_vt_orderids + pas_vt_orderids
         self.write_log(f'spd sell vt_orderids：{vt_orderids}')
         return vt_orderids
 
-    # ----------------------------------------------------------------------
+
     def spd_cover(self, grid: CtaGrid, force: bool = False):
         """非标准合约的套利平反套指令"""
         self.write_log(u'套利价差反套单平仓,price={},volume={}'.format(grid.close_price, grid.volume))
@@ -1478,22 +1502,23 @@ class CtaSpreadTemplate(CtaTemplate):
         # 检查主动腿、被动腿，是否满足
         act_close_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
         pas_close_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
-        if self.act_pos.short_pos < act_close_volume:
+        if self.act_pos.short_pos < act_close_volume and not (
+                self.act_exchange == Exchange.CFFEX or self.activate_lock):
             self.write_error(f'账号 {self.act_vt_symbol} 空单持仓{self.act_pos.short_pos}'
                              f'今仓{self.act_pos.short_td}/昨{self.act_pos.short_yd}, 不满足{act_close_volume}')
             return []
-        if self.pas_pos.long_pos < pas_close_volume:
+        if self.pas_pos.long_pos < pas_close_volume and not (self.pas_exchange == Exchange.CFFEX or self.activate_lock):
             self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.long_pos}'
                              f'今仓{self.pas_pos.long_td}/昨{self.pas_pos.long_yd}, 不满足{act_close_volume}')
             return []
 
         # 被动腿多单平仓
         pas_vt_orderids = self.sell(vt_symbol=self.pas_vt_symbol,
-                                    lock=self.pas_exchange == Exchange.CFFEX,
+                                    lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
                                     price=self.cur_pas_tick.bid_price_1,
                                     volume=grid.volume * self.pas_vol_ratio,
                                     order_type=self.order_type,
-                                    order_time=self.cur_datetime,
+                                    order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                     grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_cover，{self.pas_vt_symbol}多单平仓{grid.volume * self.pas_vol_ratio}手失败，'
@@ -1502,11 +1527,11 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 主动腿空单平仓
         act_vt_orderids = self.cover(vt_symbol=self.act_vt_symbol,
-                                     lock=self.act_exchange==Exchange.CFFEX,
+                                     lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
                                      price=self.cur_act_tick.ask_price_1,
                                      volume=grid.volume * self.act_vol_ratio,
                                      order_type=self.order_type,
-                                     order_time=self.cur_datetime,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
                                      grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_cover{self.act_vt_symbol}空单平仓{grid.volume * self.act_vol_ratio}手失败，'
@@ -1514,7 +1539,886 @@ class CtaSpreadTemplate(CtaTemplate):
             return []
 
         grid.order_status = True
-        grid.order_datetime = self.cur_datetime
+        grid.order_time = self.cur_datetime
         vt_orderids = act_vt_orderids + pas_vt_orderids
+        self.write_log(f'spd cover vt_orderids：{vt_orderids}')
+        return vt_orderids
+
+
+class CtaSpreadTemplateV2(CtaSpreadTemplate):
+    """
+    套利模板 v2
+    改进方向：
+    采用限价单方式
+    针对非标准套利合约，分别判断两腿得运动动量，根据方向进行选择优先开仓得一腿
+    设置时间撤单和价格运动偏移撤单逻辑
+
+    网格组件开仓时, open_volume =0, target_volume = n, 当open_volume == target_volume时，开仓完成。
+    网格组件平仓时，open_volume = n, target_volume = 0, 当open_volume == 0时，平仓完成
+    """
+
+    tick_window_len = 20  # 观测得tick数量
+    spd_orders = {}  # 套利得委托单，用于跟踪主动腿和被动腿得成交情况
+
+    def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
+        """"""
+        super().__init__(cta_engine, strategy_name, vt_symbol, setting)
+
+        self.spd_ask1_prices = []  # 价差得若干卖1价列表
+        self.spd_bid1_prices = []  # 价差得若干买1价列表
+        self.spd_last_prices = []  # 价差得最新价列表
+
+        self.act_ask1_prices = []  # 主动腿若干卖1价列表
+        self.act_bid1_prices = []  # 主动腿若干买1价列表
+        self.act_last_prices = []  # 主动腿若干最新价列表
+
+        self.pas_ask1_prices = []  # 被动腿若干卖1价列表
+        self.pas_bid1_prices = []  # 被动腿若干买1价列表
+        self.pas_last_prices = []  # 被动腿若干最新价列表
+
+    def on_tick(self, tick: TickData):
+        """
+        更新tick价格
+        :param tick:
+        :return:
+        """
+        # 更新主动腿的持续买1、卖1价格、最新价
+        if tick.symbol == self.act_symbol:
+            if len(self.act_ask1_prices) > self.tick_window_len:
+                self.act_ask1_prices.pop(0)
+            if tick.ask_price_1 is not None and tick.ask_volume_1 > 0:
+                self.act_ask1_prices.append(tick.ask_price_1)
+
+            if len(self.act_bid1_prices) > self.tick_window_len:
+                self.act_bid1_prices.pop(0)
+            if tick.bid_price_1 is not None and tick.bid_volume_1 > 0:
+                self.act_bid1_prices.append(tick.bid_price_1)
+
+            if len(self.act_last_prices) > self.tick_window_len:
+                self.act_last_prices.pop(0)
+            if tick.last_price is not None and tick.volume > 0:
+                self.act_last_prices.append(tick.last_price)
+
+            # 更新被动腿的持续买1、卖1价格、最新价
+            if tick.symbol == self.pas_symbol:
+                if len(self.pas_ask1_prices) > self.tick_window_len:
+                    self.pas_ask1_prices.pop(0)
+                if tick.ask_price_1 is not None and tick.ask_volume_1 > 0:
+                    self.pas_ask1_prices.append(tick.ask_price_1)
+
+                if len(self.pas_bid1_prices) > self.tick_window_len:
+                    self.pas_bid1_prices.pop(0)
+                if tick.bid_price_1 is not None and tick.bid_volume_1 > 0:
+                    self.pas_bid1_prices.append(tick.bid_price_1)
+
+                if len(self.pas_last_prices) > self.tick_window_len:
+                    self.pas_last_prices.pop(0)
+                if tick.last_price is not None and tick.volume > 0:
+                    self.pas_last_prices.append(tick.last_price)
+
+        # 实时检查委托订单
+        self.check_ordering_grids()
+
+    def on_order_all_traded(self, order: OrderData):
+        """
+        订单全部成交
+        :param order:
+        :return:
+        """
+        self.write_log(u'{},委托单:{}全部完成'.format(order.time, order.vt_orderid))
+        order_info = self.active_orders[order.vt_orderid]
+
+        # 通过vt_orderid，找到对应的网格
+        grid = order_info.get('grid', None)
+        if grid is not None:
+            # 移除当前委托单
+            if order.vt_orderid in grid.order_ids:
+                grid.order_ids.remove(order.vt_orderid)
+
+            # 平仓完毕（cover， sell）
+            if order_info.get("offset", None) != Offset.OPEN:
+                act_target_volume = grid.snapshot.get("act_target_volume")
+                act_open_volume = grid.snapshot.get("act_open_volume")
+                pas_target_volume = grid.snapshot.get("pas_target_volume")
+                pas_open_volume = grid.snapshot.get("pas_open_volume")
+
+                # 主动腿和被动腿都平仓完毕
+                if pas_target_volume == pas_open_volume == 0 and act_target_volume == act_open_volume == 0:
+                    grid.open_status = False
+                    # grid.close_status = True
+
+                    self.write_log(f'{grid.direction.value}单已平仓完毕,手数:{grid.volume}, 详细:{grid.snapshot}')
+
+                    self.update_pos(price=grid.close_price,
+                                    volume=grid.volume,
+                                    operation='cover' if grid.direction == Direction.SHORT else 'sell',
+                                    dt=self.cur_datetime)
+
+                    self.write_log(f'移除网格:{grid.to_json()}')
+                    self.gt.remove_grids_by_ids(direction=grid.direction, ids=[grid.id])
+
+            # 开仓完毕( buy, short)
+            else:
+                act_target_volume = grid.snapshot.get("act_target_volume")
+                act_open_volume = grid.snapshot.get("act_open_volume")
+                pas_target_volume = grid.snapshot.get("pas_target_volume")
+                pas_open_volume = grid.snapshot.get("pas_open_volume")
+                act_open_price = grid.snapshot.get('act_open_price')
+                pas_open_price = grid.snapshot.get('pas_open_price')
+
+                # 主动腿和被动腿都开仓完毕
+                if pas_target_volume == pas_open_volume > 0 and act_target_volume == act_open_volume > 0:
+                    grid.order_status = False
+                    grid.traded_volume = 0
+                    grid.open_status = True
+                    grid.open_time = self.cur_datetime
+
+                    # 按照实际开仓开仓价进行更新
+                    if grid.direction == Direction.LONG:
+                        if act_open_price and pas_open_price and act_open_price - pas_open_price < grid.open_price:
+                            real_open_price = act_open_price - pas_open_price
+                            self.write_log(f'[正套{grid.open_price}=>{grid.close_price}] 调整:{real_open_price}=>{grid.close_price}')
+                            grid.open_price = real_open_price
+                    elif grid.direction == Direction.SHORT:
+                        if act_open_price and pas_open_price and act_open_price - pas_open_price > grid.open_price:
+                            real_open_price = act_open_price - pas_open_price
+                            self.write_log(
+                                f'[反套{grid.open_price}=>{grid.close_price}] 调整:{real_open_price}=>{grid.close_price}')
+                            grid.open_price = real_open_price
+
+                    self.write_log(f'{grid.direction.value}单已开仓完毕,,手数:{grid.volume}, 详细:{grid.snapshot}')
+                    self.update_pos(price=grid.open_price,
+                                    volume=grid.volume,
+                                    operation='short' if grid.direction == Direction.SHORT else 'buy',
+                                    dt=self.cur_datetime)
+
+        # 在策略得活动订单中，移除
+        self.history_orders[order.vt_orderid] = self.active_orders.pop(order.vt_orderid, None)
+        self.gt.save()
+        if len(self.active_orders) < 1:
+            self.entrust = 0
+            return
+
+    def on_order_open_canceled(self, order: OrderData):
+        """
+        委托开仓单撤销
+        :param order:
+        :return:
+        """
+        self.write_log(u'委托开仓单撤销:{}'.format(order.__dict__))
+
+        if not self.trading:
+            if not self.backtesting:
+                self.write_error(u'当前不允许交易')
+            return
+
+        if order.vt_orderid not in self.active_orders:
+            self.write_error(u'{}不在未完成的委托单中{}。'.format(order.vt_orderid, self.active_orders))
+            return
+
+        # 直接更新“未完成委托单”，更新volume,retry次数
+        old_order = self.active_orders[order.vt_orderid]
+        self.write_log(u'{} 委托信息:{}'.format(order.vt_orderid, old_order))
+        old_order['traded'] = order.traded
+        order_vt_symbol = copy(old_order['vt_symbol'])
+        order_symbol, order_exchange = extract_vt_symbol(order_vt_symbol)
+
+        order_volume = old_order['volume'] - old_order['traded']
+        if order_volume <= 0:
+            msg = u'{} {}{}需重新开仓数量为{}，不再开仓' \
+                .format(self.strategy_name,
+                        order.vt_orderid,
+                        order_vt_symbol,
+                        order_volume)
+            self.write_error(msg)
+
+            self.write_log(u'移除:{}'.format(order.vt_orderid))
+            self.history_orders[order.vt_orderid] = self.active_orders.pop(order.vt_orderid, None)
+            return
+
+        order_price = old_order['price']
+        order_type = old_order.get('order_type', OrderType.LIMIT)
+
+        grid = old_order.get('grid', None)
+
+        pre_status = old_order.get('status', Status.NOTTRADED)
+        old_order.update({'status': Status.CANCELLED})
+        self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
+        if grid:
+            if order.vt_orderid in grid.order_ids:
+                self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
+                grid.order_ids.remove(order.vt_orderid)
+
+            # if not grid.order_ids:
+            #    grid.order_status = False
+
+            self.gt.save()
+        self.active_orders.update({order.vt_orderid: old_order})
+
+        self.display_grids()
+
+    def on_order_close_canceled(self, order: OrderData):
+        """委托平仓单撤销"""
+        self.write_log(u'委托平仓单撤销:{}'.format(order.__dict__))
+
+        if order.vt_orderid not in self.active_orders:
+            self.write_error(u'{}不在未完成的委托单中:{}。'.format(order.vt_orderid, self.active_orders))
+            return
+
+        if not self.trading:
+            self.write_error(f'{self.cur_datetime} 当前不允许交易')
+            return
+
+        # 直接更新“未完成委托单”，更新volume,Retry次数
+        old_order = self.active_orders[order.vt_orderid]
+        self.write_log(u'{} 订单信息:{}'.format(order.vt_orderid, old_order))
+        old_order['traded'] = order.traded
+        # order_time = old_order['order_time']
+        order_vt_symbol = copy(old_order['vt_symbol'])
+        order_symbol, order_exchange = extract_vt_symbol(order_vt_symbol)
+
+        order_volume = old_order['volume'] - old_order['traded']
+        if order_volume <= 0:
+            msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
+                .format(self.strategy_name, order.vt_orderid, order_vt_symbol, order_volume)
+            self.write_error(msg)
+            self.send_wechat(msg)
+            self.write_log(u'活动订单移除:{}'.format(order.vt_orderid))
+            self.history_orders[order.vt_orderid] = self.active_orders.pop(order.vt_orderid, None)
+            return
+
+        order_price = old_order['price']
+        order_type = old_order.get('order_type', OrderType.LIMIT)
+
+        grid = old_order.get('grid', None)
+
+        pre_status = old_order.get('status', Status.NOTTRADED)
+        old_order.update({'status': Status.CANCELLED})
+        self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
+        if grid:
+            if order.vt_orderid in grid.order_ids:
+                self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
+                grid.order_ids.remove(order.vt_orderid)
+            # if len(grid.order_ids) == 0:
+            #    grid.order_status = False
+            self.gt.save()
+        self.active_orders.update({order.vt_orderid: old_order})
+
+        self.display_grids()
+
+    def cancel_logic(self, dt, force=False, reopen=False):
+        "撤单逻辑"""
+        if len(self.active_orders) < 1:
+            self.entrust = 0
+
+        canceled_ids = []
+
+        for vt_orderid in list(self.active_orders.keys()):
+            order_info = self.active_orders.get(vt_orderid, None)
+            if order_info is None:
+                continue
+            order_vt_symbol = order_info.get('vt_symbol', self.vt_symbol)
+            order_symbol, order_exchange = extract_vt_symbol(order_vt_symbol)
+            order_time = order_info['order_time']
+            order_volume = order_info['volume'] - order_info['traded']
+            order_grid = order_info.get('grid', None)
+            order_status = order_info.get('status', Status.NOTTRADED)
+            order_type = order_info.get('order_type', OrderType.LIMIT)
+            over_seconds = (dt - order_time).total_seconds()
+
+            # 只处理未成交的限价委托单
+            if order_status in [Status.SUBMITTING, Status.NOTTRADED] and (order_type == OrderType.LIMIT):
+                if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
+                    self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
+                                   .format(over_seconds, vt_orderid, order_info))
+                    order_info.update({'status': Status.CANCELLING})
+                    self.active_orders.update({vt_orderid: order_info})
+                    ret = self.cancel_order(str(vt_orderid))
+                    if not ret:
+                        self.write_log(f'{vt_orderid}撤单失败,更新状态为撤单成功')
+                        order_info.update({'status': Status.CANCELLED})
+                        self.active_orders.update({vt_orderid: order_info})
+                    else:
+                        self.write_log(f'{vt_orderid}撤单成功')
+                        if order_grid:
+                            if vt_orderid in order_grid.order_ids:
+                                self.write_log(f'{vt_orderid}存在网格委托队列{order_grid.order_ids}中，移除')
+                                order_grid.order_ids.remove(vt_orderid)
+
+                continue
+
+            # 处理状态为‘撤销’的委托单
+            elif order_status == Status.CANCELLED:
+                self.write_log(u'委托单{}已成功撤单，删除{}'.format(vt_orderid, order_info))
+                canceled_ids.append(vt_orderid)
+
+        # 删除撤单的订单
+        for vt_orderid in canceled_ids:
+            self.write_log(u'删除orderID:{0}'.format(vt_orderid))
+            self.history_orders[vt_orderid] = self.active_orders.pop(vt_orderid, None)
+
+        if len(self.active_orders) == 0:
+            self.entrust = 0
+
+    def check_ordering_grids(self):
+        """
+        检查正在交易得网格
+        :return:
+        """
+
+        # 扫描反套网格
+        for grid in self.gt.up_grids:
+
+            # 不是在委托得网格，不处理
+            if not grid.order_status:
+                continue
+            act_target_volume = grid.snapshot.get('act_target_volume')
+            pas_target_volume = grid.snapshot.get('pas_target_volume')
+            act_open_volume = grid.snapshot.get('act_open_volume')
+            pas_open_volume = grid.snapshot.get('pas_open_volume')
+
+            # 正在委托反套单开仓状态
+            if not grid.open_status and not grid.close_status:
+
+                # 持平、未满足开仓目标
+                if act_open_volume == pas_open_volume < act_target_volume == pas_target_volume:
+                    # 价差满足,目前没有委托单
+                    if self.cur_spd_tick.bid_price_1 >= grid.open_price and len(grid.order_ids) == 0:
+                        # 买入被动腿数量
+                        buy_pas_volume = pas_target_volume - pas_open_volume
+                        # 开多被动腿（限价单）
+                        pas_vt_orderids = self.buy(vt_symbol=self.pas_vt_symbol,
+                                                   lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                                   price=self.cur_pas_tick.ask_price_1,
+                                                   volume=buy_pas_volume,
+                                                   order_type=self.order_type,
+                                                   order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                   grid=grid)
+                        if not pas_vt_orderids:
+                            self.write_error(f'spd_short，{self.pas_vt_symbol}开多仓{buy_pas_volume}手失败，'
+                                             f'委托价:{self.cur_pas_tick.ask_price_1}')
+                            continue
+
+                # 主动腿缺腿，当前没有委托单
+                if act_open_volume < pas_open_volume and len(grid.order_ids) == 0:
+                    short_act_volume = pas_open_volume - act_open_volume
+                    # 开空主动腿
+                    act_vt_orderids = self.short(vt_symbol=self.act_vt_symbol,
+                                                 lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+                                                 price=self.cur_act_tick.bid_price_1,
+                                                 volume=short_act_volume,
+                                                 order_type=self.order_type,
+                                                 order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                 grid=grid)
+                    if not act_vt_orderids:
+                        self.write_error(f'spd_short，{self.act_vt_symbol}开空仓{short_act_volume}手失败，'
+                                         f'委托价:{self.cur_act_tick.bid_price_1}')
+                        continue
+
+            # 正在委托得反套单平仓状态
+            if grid.open_status and grid.close_status :
+                # 持平、未满足平仓目标
+                if act_open_volume == pas_open_volume > act_target_volume == pas_target_volume:
+                    # 价差满足平仓,目前没有委托单
+                    if self.cur_spd_tick.bid_price_1 <= grid.close_price and len(grid.order_ids) == 0:
+                        pas_close_volume = pas_open_volume
+                        # 被动腿多单平仓
+                        pas_vt_orderids = self.sell(vt_symbol=self.pas_vt_symbol,
+                                                    lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                                    price=self.cur_pas_tick.bid_price_1,
+                                                    volume=pas_close_volume,
+                                                    order_type=self.order_type,
+                                                    order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                    grid=grid)
+                        if not pas_vt_orderids:
+                            self.write_error(f'spd_cover，{self.pas_vt_symbol}多单平仓{pas_close_volume}手失败，'
+                                             f'委托价:{self.cur_pas_tick.bid_price_1}')
+                            continue
+
+                # 当主动腿瘸腿时，降低主动腿
+                if pas_target_volume <= pas_open_volume < act_open_volume and len(grid.order_ids) == 0:
+                    act_close_volume = act_open_volume - pas_open_volume
+                    # 主动腿空单平仓
+                    act_vt_orderids = self.cover(vt_symbol=self.act_vt_symbol,
+                                                 lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+                                                 price=self.cur_act_tick.ask_price_1,
+                                                 volume=act_close_volume,
+                                                 order_type=self.order_type,
+                                                 order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                 grid=grid)
+                    if not act_vt_orderids:
+                        self.write_error(f'spd_cover{self.act_vt_symbol}空单平仓{act_close_volume}手失败，'
+                                         f'委托价:{self.cur_act_tick.ask_price_1}')
+                        continue
+
+        # 扫描正套网格
+        for grid in self.gt.dn_grids:
+
+            # 不是在委托得网格，不处理
+            if not grid.order_status:
+                continue
+            act_target_volume = grid.snapshot.get('act_target_volume')
+            pas_target_volume = grid.snapshot.get('pas_target_volume')
+            act_open_volume = grid.snapshot.get('act_open_volume')
+            pas_open_volume = grid.snapshot.get('pas_open_volume')
+
+            # 正在委托正套单开仓状态
+            if not grid.open_status and not grid.close_status:
+                # 持平、未满足开仓目标
+                if act_open_volume == pas_open_volume < act_target_volume == pas_target_volume:
+                    # 价差满足,目前没有委托单
+                    if self.cur_spd_tick.ask_price_1 <= grid.open_price and len(grid.order_ids) == 0:
+                        short_pas_volume = pas_target_volume - pas_open_volume
+                        # 开空被动腿
+                        pas_vt_orderids = self.short(vt_symbol=self.pas_vt_symbol,
+                                                     lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                                     price=self.cur_pas_tick.bid_price_1,
+                                                     volume=short_pas_volume,
+                                                     order_type=self.order_type,
+                                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                     grid=grid)
+                        if not pas_vt_orderids:
+                            self.write_error(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                             f'被动腿{self.pas_vt_symbol}开空仓{short_pas_volume}手失败，'
+                                             f'委托价:{self.cur_pas_tick.bid_price_1}')
+                            continue
+                        self.write_log(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                         f'被动腿{self.pas_vt_symbol}开空仓{short_pas_volume}手，'
+                                         f'委托价:{self.cur_pas_tick.bid_price_1}')
+                        continue
+
+                # 主动腿缺腿，当前没有委托单
+                if act_open_volume < pas_open_volume and len(grid.order_ids) == 0:
+                    buy_act_volume = pas_open_volume - act_open_volume
+                    act_vt_orderids = self.buy(vt_symbol=self.act_vt_symbol,
+                                               lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+                                               price=self.cur_act_tick.ask_price_1,
+                                               volume=buy_act_volume,
+                                               order_type=self.order_type,
+                                               order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                               grid=grid)
+                    if not act_vt_orderids:
+                        self.write_error(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                         f'主动腿{self.act_vt_symbol}开多仓{buy_act_volume}手，'
+                                         f'委托价:{self.cur_act_tick.ask_price_1}')
+
+            # 正在委托得正套单平仓状态
+            if grid.open_status and grid.close_status:
+                # 持平、未满足平仓目标
+                if act_open_volume == pas_open_volume > act_target_volume == pas_target_volume:
+                    # 价差满足平仓,目前没有委托单
+                    if self.cur_spd_tick.bid_price_1 >= grid.close_price and len(grid.order_ids) == 0:
+                        pas_close_volume = pas_open_volume
+                        # 被动腿空单平仓
+                        pas_vt_orderids = self.cover(vt_symbol=self.pas_vt_symbol,
+                                                     lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                                     price=self.cur_pas_tick.ask_price_1,
+                                                     volume=pas_close_volume,
+                                                     order_type=self.order_type,
+                                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                     grid=grid)
+                        if not pas_vt_orderids:
+                            self.write_error(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                             f'被动腿{self.pas_vt_symbol}空单平仓{pas_close_volume}手失败，'
+                                             f'委托价:{self.cur_pas_tick.ask_price_1}')
+                            continue
+                        self.write_log(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                         f'被动腿{self.pas_vt_symbol}空单平仓{pas_close_volume}手，'
+                                         f'委托价:{self.cur_pas_tick.ask_price_1}')
+                        continue
+
+                if pas_target_volume <= pas_open_volume < act_open_volume  and len(grid.order_ids) == 0:
+                    act_close_volume = act_open_volume - pas_open_volume
+                    # 主动腿多单平仓
+                    act_vt_orderids = self.sell(vt_symbol=self.act_vt_symbol,
+                                                lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+                                                price=self.cur_act_tick.bid_price_1,
+                                                volume=act_close_volume,
+                                                order_type=self.order_type,
+                                                order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                                grid=grid)
+                    if not act_vt_orderids:
+                        self.write_error(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                         f'主动腿{self.act_vt_symbol}多单平仓{act_close_volume}手失败，'
+                                         f'委托价:{self.cur_act_tick.bid_price_1}')
+                        continue
+                    self.write_log(f'[正套{grid.open_price}=>{grid.close_price}]，'
+                                     f'主动腿{self.act_vt_symbol}多单平仓{act_close_volume}手，'
+                                     f'委托价:{self.cur_act_tick.bid_price_1}')
+
+    def spd_buy(self, grid: CtaGrid, force: bool = False):
+        """非标准合约的套利正套指令"""
+        self.write_log(u'套利价差正套单,price={},volume={}'.format(grid.open_price, grid.volume))
+
+        if self.entrust != 0:
+            self.write_log(u'[正套]正在委托，不开仓')
+            return []
+        if not self.trading:
+            self.write_log(u'[正套]停止状态，不开仓')
+            return []
+        if not self.allow_trading_open:
+            self.write_log(f'[正套]{self.cur_datetime}不允许开仓')
+            return []
+        if self.force_trading_close:
+            self.write_log(f'[正套]{self.cur_datetime}强制平仓日，不开仓')
+            return []
+
+        # 检查流动性缺失
+        if not self.check_liquidity(
+                direction=Direction.LONG,
+                ask_volume=grid.volume * self.act_vol_ratio,
+                bid_volume=grid.volume * self.pas_vol_ratio
+        ) \
+                and not force:
+            return []
+
+        # 检查涨跌停距离
+        if self.check_near_up_nor_down():
+            return []
+
+        if self.cur_spd_tick.bid_price_1 > grid.open_price and not force:
+            self.write_log(u'[正套]价差{}不满足:{}'.format(self.cur_spd_tick.bid_price_1, grid.open_price))
+            return []
+
+        # 判断主动腿、被动腿得动能方向，选择优先下单得合约
+        # 主动腿目标、被动腿目标
+        act_target_volume = grid.volume * self.act_vol_ratio
+        pas_target_volume = grid.volume * self.pas_vol_ratio
+
+        # 检查主动腿和被动腿需要得保证金，检查账号是否满足保证金
+        # 主动腿保证金/被动腿保证金
+        act_margin = act_target_volume * self.cur_act_tick.last_price * self.act_symbol_size * self.act_margin_rate
+        pas_margin = pas_target_volume * self.cur_pas_tick.last_price * self.pas_symbol_size * self.pas_margin_rate
+
+        # 当前净值,可用资金,资金占用比例,资金上限
+        balance, avaliable, occupy_percent, percent_limit = self.cta_engine.get_account()
+
+        # 同一品种套利
+        invest_margin = max(act_margin, pas_margin)
+
+        # 计划使用保证金
+        target_margin = balance * (occupy_percent / 100) + invest_margin
+
+        if 100 * (target_margin / balance) > percent_limit:
+            self.write_error(u'[正套]委托后,预计当前资金占用:{},超过限定:{}比例,不能开仓'
+                             .format(100 * (target_margin / balance), percent_limit))
+            return []
+
+        #
+        # # 开多主动腿（FAK 或者限价单）
+        # act_vt_orderids = self.buy(vt_symbol=self.act_vt_symbol,
+        #                            lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+        #                            price=self.cur_act_tick.ask_price_1,
+        #                            volume=grid.volume * self.act_vol_ratio,
+        #                            order_type=self.order_type,
+        #                            order_time=self.cur_datetime if self.backtesting else datetime.now(),
+        #                            grid=grid)
+        # if not act_vt_orderids:
+        #     self.write_error(f'spd_buy，{self.act_vt_symbol}开多仓{grid.volume * self.act_vol_ratio}手失败，'
+        #                      f'委托价:{self.cur_act_tick.ask_price_1}')
+        #     return []
+
+        # 开空被动腿
+        pas_vt_orderids = self.short(vt_symbol=self.pas_vt_symbol,
+                                     lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                     price=self.cur_pas_tick.bid_price_1,
+                                     volume=grid.volume * self.pas_vol_ratio,
+                                     order_type=self.order_type,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                     grid=grid)
+        if not pas_vt_orderids:
+            self.write_error(f'[正套-被动腿]，{self.pas_vt_symbol}开空仓{grid.volume * self.pas_vol_ratio}手失败，'
+                             f'委托价:{self.cur_pas_tick.bid_price_1}')
+            return []
+        self.write_log(f'[正套-被动腿]，{self.pas_vt_symbol}开空仓{grid.volume * self.pas_vol_ratio}手，'
+                         f'委托价:{self.cur_pas_tick.bid_price_1}')
+
+        # 利用网格得snapshort进行记录，当前持有仓位，目标仓位
+        grid.snapshot.update(
+            {"act_vt_symbol": self.act_vt_symbol, "act_open_volume": 0, 'act_target_volume': act_target_volume,
+             "pas_vt_symbol": self.pas_vt_symbol, "pas_open_volume": 0, 'pas_target_volume': pas_target_volume})
+        grid.order_status = True
+        grid.order_time = self.cur_datetime
+        vt_orderids = pas_vt_orderids
+        self.write_log(u'[正套][被动腿] vt_ordderids：{}'.format(vt_orderids))
+
+        # 添加正套得委托单跟踪，对象是网格id，内容是方向
+        self.spd_orders.update({grid.id: {'direction': Direction.LONG}, 'offset': Offset.OPEN})
+
+        return vt_orderids
+
+    def spd_short(self, grid: CtaGrid, force: bool = False):
+        """非标准合约的套利反套指令"""
+        self.write_log(u'委托反套单,price={},volume={}'.format(grid.open_price, grid.volume))
+
+        if grid.order_status:
+            self.write_log(u'[反套]正在委托，不重复开仓')
+            return []
+        if not self.trading:
+            self.write_log(u'[反套]停止状态，不开仓')
+            return []
+        if not self.allow_trading_open:
+            self.write_log(f'[反套]{self.cur_datetime}不允许开仓')
+            return []
+        if self.force_trading_close:
+            self.write_log(f'[反套]{self.cur_datetime}强制平仓日，不开仓')
+            return []
+        # 检查流动性缺失
+        if not self.check_liquidity(direction=Direction.SHORT,
+                                    ask_volume=grid.volume * self.pas_vol_ratio,
+                                    bid_volume=grid.volume * self.act_vol_ratio
+                                    ) and not force:
+            return []
+        # 检查涨跌停距离
+        if self.check_near_up_nor_down():
+            return []
+
+        if self.cur_spd_tick.bid_price_1 < grid.open_price and not force:
+            self.write_log(u'[反套]{}不满足开仓条件:{}'.format(self.cur_spd_tick.bid_price_1, grid.open_price))
+            return []
+
+        # 判断主动腿、被动腿得动能方向，选择优先下单得合约
+        # 主动腿目标、被动腿目标
+        act_target_volume = grid.volume * self.act_vol_ratio
+        pas_target_volume = grid.volume * self.pas_vol_ratio
+
+        # 检查主动腿和被动腿需要得保证金，检查账号是否满足保证金
+        # 主动腿保证金/被动腿保证金
+        act_margin = act_target_volume * self.cur_act_tick.last_price * self.act_symbol_size * self.act_margin_rate
+        pas_margin = pas_target_volume * self.cur_pas_tick.last_price * self.pas_symbol_size * self.pas_margin_rate
+
+        # 当前净值,可用资金,资金占用比例,资金上限
+        balance, avaliable, occupy_percent, percent_limit = self.cta_engine.get_account()
+
+        # 同一品种套利
+        invest_margin = max(act_margin, pas_margin)
+
+        # 计划使用保证金
+        target_margin = balance * (occupy_percent / 100) + invest_margin
+
+        if 100 * (target_margin / balance) > percent_limit:
+            self.write_error(u'[反套]委托后,预计当前资金占用:{},超过限定:{}比例,不能开仓'
+                             .format(100 * (target_margin / balance), percent_limit))
+            return []
+        # # 开空主动腿
+        # act_vt_orderids = self.short(vt_symbol=self.act_vt_symbol,
+        #                              lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+        #                              price=self.cur_act_tick.bid_price_1,
+        #                              volume=grid.volume * self.act_vol_ratio,
+        #                              order_type=self.order_type,
+        #                              order_time=self.cur_datetime if self.backtesting else datetime.now(),
+        #                              grid=grid)
+        # if not act_vt_orderids:
+        #     self.write_error(f'spd_short，{self.act_vt_symbol}开空仓{grid.volume * self.act_vol_ratio}手失败，'
+        #                      f'委托价:{self.cur_act_tick.bid_price_1}')
+        #     return []
+
+        # 开多被动腿（FAK或者限价单）
+        pas_vt_orderids = self.buy(vt_symbol=self.pas_vt_symbol,
+                                   lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                   price=self.cur_pas_tick.ask_price_1,
+                                   volume=pas_target_volume,
+                                   order_type=self.order_type,
+                                   order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                   grid=grid)
+        if not pas_vt_orderids:
+            self.write_error(f'[反套-被动腿]，{self.pas_vt_symbol}开多仓{pas_target_volume}手失败，'
+                             f'委托价:{self.cur_pas_tick.ask_price_1}')
+            return []
+        self.write_log(f'[反套-被动腿]，{self.pas_vt_symbol}开多仓{pas_target_volume}手，'
+                         f'委托价:{self.cur_pas_tick.ask_price_1}')
+
+        # 设置实际开仓数量为0，用于不断实现目标
+        grid.snapshot.update({"act_vt_symbol": self.act_vt_symbol,
+                              "act_open_volume": 0,
+                              'act_target_volume': act_target_volume,
+                              "pas_vt_symbol": self.pas_vt_symbol,
+                              "pas_open_volume": 0,
+                              'pas_target_volume': pas_target_volume})
+
+        grid.order_status = True
+        grid.order_time = self.cur_datetime
+
+        vt_orderids = pas_vt_orderids
+        self.write_log(u'[反套-被动腿] vt_order_ids：{0}'.format(vt_orderids))
+        return vt_orderids
+
+
+    def spd_sell(self, grid: CtaGrid, force: bool = False):
+        """非标准合约的套利平正套指令"""
+        self.write_log(f'[正套:{grid.open_price}=>{grid.close_price}]平仓,volume={grid.volume}')
+        if grid.order_status:
+            self.write_log(f'[正套:{grid.open_price}=>{grid.close_price}]正在委托，不平仓')
+            return []
+        if not self.trading:
+            self.write_log(f'[正套:{grid.open_price}=>{grid.close_price}]策略处于停止状态，不平仓')
+            return []
+        # 检查流动性缺失
+        if not self.check_liquidity(
+                direction=Direction.SHORT,
+                ask_volume=grid.volume * self.pas_vol_ratio,
+                bid_volume=grid.volume * self.act_vol_ratio
+        ) and not force:
+            return []
+
+        # 检查涨跌停距离
+        if self.check_near_up_nor_down():
+            return []
+
+        if self.cur_spd_tick.bid_price_1 < grid.close_price and not force:
+            self.write_log(u'实际价差{}不满足:{}'.format(self.cur_spd_tick.bid_price_1, grid.close_price))
+            return []
+
+        # 获取账号持仓
+        self.act_pos = self.cta_engine.get_position_holding(vt_symbol=self.act_vt_symbol)
+        self.pas_pos = self.cta_engine.get_position_holding(vt_symbol=self.pas_vt_symbol)
+        if not all([self.act_pos, self.pas_pos]):
+            self.write_error(f'[正套:{grid.open_price}=>{grid.close_price}]主动腿/被动腿的账号持仓数据不存在')
+            return []
+
+        # 获取需要平仓的主动腿、被动腿volume
+        act_close_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+        pas_close_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
+
+        # 检查账号持仓是否满足平仓目标
+        if self.act_pos.long_pos < act_close_volume and not (self.act_exchange == Exchange.CFFEX or self.activate_lock):
+            self.write_error(f'[正套]平仓，账号主动腿 {self.act_vt_symbol} 多单持仓{self.act_pos.long_pos}'
+                             f'今仓{self.act_pos.long_td}/昨{self.act_pos.long_yd}, 不满足{act_close_volume}')
+            return []
+        if self.pas_pos.short_pos < pas_close_volume and not (
+                self.pas_exchange == Exchange.CFFEX or self.activate_lock):
+            self.write_error(f'[正套]平仓，账号被动腿 {self.pas_vt_symbol} 多单持仓{self.pas_pos.short_pos}'
+                             f'今仓{self.pas_pos.short_td}/昨{self.pas_pos.short_yd}, 不满足{act_close_volume}')
+            return []
+
+        # 更新主动腿和被动腿得目标持仓为0，即平掉仓位
+        grid.snapshot.update({"act_target_volume": 0,"pas_target_volume": 0})
+
+        # 被动腿空单平仓
+        pas_vt_orderids = self.cover(vt_symbol=self.pas_vt_symbol,
+                                     lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                     price=self.cur_pas_tick.ask_price_1,
+                                     volume=pas_close_volume,
+                                     order_type=self.order_type,
+                                     order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                     grid=grid)
+        if not pas_vt_orderids:
+            self.write_error(f'[正套:{grid.open_price}=>{grid.close_price}]，{self.pas_vt_symbol}空单平仓{pas_close_volume}手失败，'
+                             f'委托价:{self.cur_pas_tick.ask_price_1}')
+            return []
+
+        self.write_log(f'[正套:{grid.open_price}=>{grid.close_price}] {self.pas_vt_symbol}空单平仓{pas_close_volume}手，'
+                         f'委托价:{self.cur_pas_tick.ask_price_1}')
+
+        # 如果属于强制平仓得话，设置close价格低于当前价差。
+        if force:
+            new_close_price = self.cur_spd_tick.bid_price_1 - 10 * self.act_price_tick
+            self.write_log(f'[正套:{grid.open_price}=>{grid.close_price}] 调整平仓价:{new_close_price}')
+            grid.close_price = self.cur_spd_tick.bid_price_1 - 10 * self.act_price_tick
+
+        #
+        # # 主动腿多单平仓
+        # act_vt_orderids = self.sell(vt_symbol=self.act_vt_symbol,
+        #                             lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+        #                             price=self.cur_act_tick.bid_price_1,
+        #                             volume=grid.volume * self.act_vol_ratio,
+        #                             order_type=self.order_type,
+        #                             order_time=self.cur_datetime if self.backtesting else datetime.now(),
+        #                             grid=grid)
+        # if not act_vt_orderids:
+        #     self.write_error(f'spd_sell，{self.act_vt_symbol}多单平仓{grid.volume * self.act_vol_ratio}手失败，'
+        #                      f'委托价:{self.cur_act_tick.bid_price_1}')
+        #     return []
+
+        grid.close_status = True
+        grid.order_status = True
+        grid.order_time = self.cur_datetime
+        vt_orderids =  pas_vt_orderids
+        self.write_log(f'[正套:{grid.open_price}=>{grid.close_price}] vt_orderids：{vt_orderids}')
+
+        return vt_orderids
+
+    # ----------------------------------------------------------------------
+    def spd_cover(self, grid: CtaGrid, force: bool = False):
+        """非标准合约的套利平反套指令"""
+        self.write_log(u'套利价差反套单平仓,price={},volume={}'.format(grid.close_price, grid.volume))
+        if grid.order_status:
+            self.write_log(u'[反套] 正在委托平仓，不重复')
+            return []
+        if not self.trading:
+            self.write_log(u'停止状态，不平仓')
+            return []
+        # 检查流动性缺失
+        if not self.check_liquidity(
+                direction=Direction.LONG,
+                ask_volume=grid.volume * self.act_vol_ratio,
+                bid_volume=grid.volume * self.pas_vol_ratio
+        ) and not force:
+            return []
+        # 检查涨跌停距离
+        if self.check_near_up_nor_down():
+            return []
+
+        if self.cur_spd_tick.ask_price_1 > grid.close_price and not force:
+            self.write_log(u'实际价差{}不满足:{}'.format(self.cur_spd_tick.ask_price_1, grid.close_price))
+            return []
+
+        # 获取账号内主动腿和被动腿的持仓
+        self.act_pos = self.cta_engine.get_position_holding(vt_symbol=self.act_vt_symbol)
+        self.pas_pos = self.cta_engine.get_position_holding(vt_symbol=self.pas_vt_symbol)
+
+        if not all([self.act_pos, self.pas_pos]):
+            self.write_error('主动腿/被动退得持仓数据不存在')
+            return []
+
+        # 检查主动腿、被动腿，是否满足
+        act_close_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+        pas_close_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
+        if self.act_pos.short_pos < act_close_volume and not (
+                self.act_exchange == Exchange.CFFEX or self.activate_lock):
+            self.write_error(f'账号 {self.act_vt_symbol} 空单持仓{self.act_pos.short_pos}'
+                             f'今仓{self.act_pos.short_td}/昨{self.act_pos.short_yd}, 不满足{act_close_volume}')
+            return []
+        if self.pas_pos.long_pos < pas_close_volume and not (self.pas_exchange == Exchange.CFFEX or self.activate_lock):
+            self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.long_pos}'
+                             f'今仓{self.pas_pos.long_td}/昨{self.pas_pos.long_yd}, 不满足{act_close_volume}')
+            return []
+
+        # 更新主动腿和被动腿得目标持仓为0，即平掉仓位
+        grid.snapshot.update({"act_target_volume": 0, "pas_target_volume": 0})
+
+        # 被动腿多单平仓
+        pas_vt_orderids = self.sell(vt_symbol=self.pas_vt_symbol,
+                                    lock=self.pas_exchange == Exchange.CFFEX or self.activate_lock,
+                                    price=self.cur_pas_tick.bid_price_1,
+                                    volume=pas_close_volume,
+                                    order_type=self.order_type,
+                                    order_time=self.cur_datetime if self.backtesting else datetime.now(),
+                                    grid=grid)
+        if not pas_vt_orderids:
+            self.write_error(f'spd_cover，{self.pas_vt_symbol}多单平仓{pas_close_volume}手失败，'
+                             f'委托价:{self.cur_pas_tick.bid_price_1}')
+            return []
+
+        # 如果属于强制平仓得话，设置close价格高于于当前价差10跳。
+        if force:
+            grid.close_price = self.cur_spd_tick.ask_price_1 + 10 * self.act_price_tick
+
+        # # 主动腿空单平仓
+        # act_vt_orderids = self.cover(vt_symbol=self.act_vt_symbol,
+        #                              lock=self.act_exchange == Exchange.CFFEX or self.activate_lock,
+        #                              price=self.cur_act_tick.ask_price_1,
+        #                              volume=grid.volume * self.act_vol_ratio,
+        #                              order_type=self.order_type,
+        #                              order_time=self.cur_datetime if self.backtesting else datetime.now(),
+        #                              grid=grid)
+        # if not act_vt_orderids:
+        #     self.write_error(f'spd_cover{self.act_vt_symbol}空单平仓{grid.volume * self.act_vol_ratio}手失败，'
+        #                      f'委托价:{self.cur_act_tick.ask_price_1}')
+        #     return []
+        grid.close_status = True
+        grid.order_status = True
+        grid.order_time = self.cur_datetime
+        vt_orderids = pas_vt_orderids
         self.write_log(f'spd cover vt_orderids：{vt_orderids}')
         return vt_orderids

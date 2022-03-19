@@ -699,6 +699,16 @@ def save_data_to_pkb2(data: Any, pkb2_file_name):
         pickle.dump(data, f)
 
 
+def get_months_diff(act_symbol, pas_symbol):
+    """获取合约得相隔月份"""
+    pas_month = int(pas_symbol[-2:])
+    act_month = int(act_symbol[-2:])
+    if pas_month < act_month:
+        pas_month += 12
+
+    return max(1, pas_month - act_month)
+
+
 class BarGenerator:
     """
     For:
